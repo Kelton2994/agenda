@@ -39,14 +39,17 @@
   <!-- APP -->
   <section id="tela-app" hidden>
     <header class="topo">
-      <div>
-        <h1>Minha Agenda</h1>
-        <p id="resumo" class="resumo"></p>
+      <div class="topo-linha">
+        <div>
+          <p id="saudacao" class="saudacao">Olá 👋</p>
+          <h1 id="data-hoje">Minha Agenda</h1>
+        </div>
+        <div class="topo-acoes">
+          <button id="btn-notif" class="icone" title="Ativar lembretes" aria-label="Ativar lembretes">🔔</button>
+          <button id="btn-sair" class="icone" title="Sair" aria-label="Sair">Sair</button>
+        </div>
       </div>
-      <div class="topo-acoes">
-        <button id="btn-notif" class="icone" title="Ativar lembretes" aria-label="Ativar lembretes">🔔</button>
-        <button id="btn-sair" class="icone" title="Sair" aria-label="Sair">Sair</button>
-      </div>
+      <div id="resumo" class="resumo"></div>
     </header>
 
     <nav class="abas">
@@ -67,6 +70,7 @@
   <!-- NOVA / EDITAR TAREFA -->
   <dialog id="dlg-tarefa" class="sheet">
     <form id="form-tarefa">
+      <div class="alca"></div>
       <h2 id="dlg-titulo">Nova tarefa</h2>
 
       <label>O que precisa fazer?
@@ -130,6 +134,7 @@
   <!-- PAUSAR -->
   <dialog id="dlg-pausa" class="sheet">
     <form id="form-pausa">
+      <div class="alca"></div>
       <h2>Pausar tarefa</h2>
       <p class="muted" id="pausa-nome"></p>
       <label>Onde você parou? (pra retomar rápido depois)

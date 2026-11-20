@@ -213,7 +213,7 @@ function card(t) {
     ].join('');
   }
 
-  const classes = ['card', atrasada ? 'atrasada' : '', t.status === 'fazendo' ? 'fazendo' : '', feita ? 'feita' : ''].join(' ');
+  const classes = ['card', `s-${t.status}`, atrasada ? 'atrasada' : '', t.status === 'fazendo' ? 'fazendo' : '', feita ? 'feita' : ''].join(' ');
   return `<article class="${classes}" data-id="${t.id}">
     <div class="card-corpo" data-acao="editar">
       <h3>${esc(t.titulo)}</h3>
@@ -226,7 +226,7 @@ function card(t) {
 
 function secao(titulo, itens, classe = '') {
   if (!itens.length) return '';
-  return `<div class="secao-titulo ${classe}"><span>${titulo}</span><span>${itens.length}</span></div>${itens.map(card).join('')}`;
+  return `<div class="secao-titulo ${classe}"><span><i class="ponto"></i>${titulo}</span><span class="contador">${itens.length}</span></div>${itens.map(card).join('')}`;
 }
 
 function filtroBusca(lista) {
@@ -241,8 +241,16 @@ function render() {
   const abertas = tarefas.filter((t) => t.status !== 'concluido');
   const atrasadas = abertas.filter((t) => t.prazo && t.prazo < h);
   const paraHoje = abertas.filter((t) => t.prazo === h);
-  $('#resumo').textContent =
-    `${abertas.length} abertas · ${paraHoje.length} pra hoje · ${atrasadas.length} atrasadas`;
+  const pausadas = abertas.filter((t) => t.status === 'pausado');
+  $('#resumo').innerHTML = `
+    <div class="tile ${atrasadas.length ? 'tile-perigo' : ''}"><b>${atrasadas.length}</b><span>Atrasadas</span></div>
+    <div class="tile"><b>${paraHoje.length}</b><span>Pra hoje</span></div>
+    <div class="tile ${pausadas.length ? 'tile-alerta' : ''}"><b>${pausadas.length}</b><span>Pausadas</span></div>
+    <div class="tile"><b>${abertas.length}</b><span>Abertas</span></div>`;
+  const hora = new Date().getHours();
+  $('#saudacao').textContent = hora < 12 ? 'Bom dia 👋' : hora < 18 ? 'Boa tarde 👋' : 'Boa noite 👋';
+  const dataTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('#data-hoje').textContent = dataTxt.charAt(0).toUpperCase() + dataTxt.slice(1);
 
   let html = '';
   if (aba === 'hoje') {
