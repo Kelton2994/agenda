@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Agenda">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>Minha Agenda</title>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <section id="tela-login" class="login" hidden>
+    <div class="login-card">
+      <img src="icons/icon-192.png" alt="" class="login-logo">
+      <h1>Minha Agenda</h1>
+      <p class="muted">Entre para ver suas tarefas no celular e no PC.</p>
+      <form id="form-login">
+        <label>E-mail
+          <input type="email" id="login-email" required autocomplete="email">
+        </label>
+        <label>Senha
+          <input type="password" id="login-senha" required minlength="6" autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn primario">Entrar</button>
+        <button type="button" id="btn-criar-conta" class="btn texto">Criar minha conta</button>
+        <p id="login-msg" class="msg"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <section id="tela-app" hidden>
+    <header class="topo">
+      <div>
+        <h1>Minha Agenda</h1>
+        <p id="resumo" class="resumo"></p>
+      </div>
+      <div class="topo-acoes">
+        <button id="btn-notif" class="icone" title="Ativar lembretes" aria-label="Ativar lembretes">🔔</button>
+        <button id="btn-sair" class="icone" title="Sair" aria-label="Sair">Sair</button>
+      </div>
+    </header>
+
+    <nav class="abas">
+      <button data-aba="hoje" class="ativa">Hoje</button>
+      <button data-aba="todas">Todas</button>
+      <button data-aba="concluidas">Concluídas</button>
+    </nav>
+
+    <div id="busca-wrap" class="busca-wrap" hidden>
+      <input id="busca" type="search" placeholder="Buscar tarefa ou quem pediu">
+    </div>
+
+    <main id="lista" class="lista"></main>
+
+    <button id="fab" class="fab" aria-label="Nova tarefa">+</button>
+  </section>
+
+  <!-- NOVA / EDITAR TAREFA -->
+  <dialog id="dlg-tarefa" class="sheet">
+    <form id="form-tarefa">
+      <h2 id="dlg-titulo">Nova tarefa</h2>
+
+      <label>O que precisa fazer?
+        <input id="f-titulo" required autocomplete="off" placeholder="Ex.: Relatório de absenteísmo pro gerente">
+      </label>
+
+      <div class="campo">
+        <span class="rotulo">Prazo</span>
+        <div class="chips" id="chips-prazo">
+          <button type="button" data-prazo="hoje">Hoje</button>
+          <button type="button" data-prazo="amanha">Amanhã</button>
+          <button type="button" data-prazo="data">Escolher data</button>
+          <button type="button" data-prazo="">Sem prazo</button>
+        </div>
+        <input type="date" id="f-prazo" hidden>
+      </div>
+
+      <label>Quem pediu
+        <input id="f-quem" list="lista-quem" autocomplete="off" placeholder="Opcional">
+      </label>
+      <datalist id="lista-quem"></datalist>
+
+      <div class="campo">
+        <label>Me lembrar em
+          <input type="datetime-local" id="f-lembrar">
+        </label>
+        <div class="chips pequeno" id="chips-lembrar">
+          <button type="button" data-lembrar="5min">Daqui 5 min</button>
+          <button type="button" data-lembrar="1h">Daqui 1h</button>
+          <button type="button" data-lembrar="amanha-0630">Amanhã 06:30</button>
+          <button type="button" data-lembrar="">Sem lembrete</button>
+        </div>
+      </div>
+
+      <div class="campo" id="campo-tipo">
+        <span class="rotulo">Tipo de aviso</span>
+        <div class="chips" id="chips-tipo">
+          <button type="button" data-tipo="simples">🔔 Notificação</button>
+          <button type="button" data-tipo="alarme">⏰ Alarme (insiste até eu responder)</button>
+        </div>
+      </div>
+
+      <div id="campos-edicao" hidden>
+        <label>Status
+          <select id="f-status"></select>
+        </label>
+        <label>Anotações / onde parei
+          <textarea id="f-notas" rows="3"></textarea>
+        </label>
+      </div>
+
+      <div class="rodape">
+        <button type="button" id="btn-excluir" class="btn perigo" hidden>Excluir</button>
+        <span class="esp"></span>
+        <button type="button" id="btn-cancelar" class="btn texto">Cancelar</button>
+        <button type="submit" id="btn-salvar" class="btn primario">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- PAUSAR -->
+  <dialog id="dlg-pausa" class="sheet">
+    <form id="form-pausa">
+      <h2>Pausar tarefa</h2>
+      <p class="muted" id="pausa-nome"></p>
+      <label>Onde você parou? (pra retomar rápido depois)
+        <textarea id="p-notas" rows="3" placeholder="Ex.: falta só conferir o turno 3 e mandar o e-mail"></textarea>
+      </label>
+      <div class="rodape">
+        <span class="esp"></span>
+        <button type="button" id="btn-pausa-cancelar" class="btn texto">Cancelar</button>
+        <button type="submit" class="btn primario">Pausar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
