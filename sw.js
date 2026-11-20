@@ -1,5 +1,5 @@
 // Service worker: deixa o app instalável e abre rápido
-const CACHE = 'agenda-v4';
+const CACHE = 'agenda-v5';
 const ARQUIVOS = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.json', './icons/icon-192.png', './icons/icon-512.png'
@@ -24,7 +24,7 @@ self.addEventListener('fetch', (e) => {
   const permitido = url.origin === location.origin || url.hostname === 'cdn.jsdelivr.net';
   if (req.method !== 'GET' || !permitido) return;
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })
       .then((r) => {
         const copia = r.clone();
         caches.open(CACHE).then((c) => c.put(req, copia));

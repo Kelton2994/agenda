@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=5">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -70,7 +70,7 @@
   <!-- NOVA / EDITAR TAREFA -->
   <dialog id="dlg-tarefa" class="sheet">
     <form id="form-tarefa">
-      <div class="alca"></div>
+      <div class="alca" tabindex="-1" autofocus></div>
       <h2 id="dlg-titulo">Nova tarefa</h2>
 
       <label>O que precisa fazer?
@@ -134,7 +134,7 @@
   <!-- PAUSAR -->
   <dialog id="dlg-pausa" class="sheet">
     <form id="form-pausa">
-      <div class="alca"></div>
+      <div class="alca" tabindex="-1" autofocus></div>
       <h2>Pausar tarefa</h2>
       <p class="muted" id="pausa-nome"></p>
       <label>Onde você parou? (pra retomar rápido depois)
@@ -150,6 +150,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>

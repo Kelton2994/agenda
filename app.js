@@ -174,7 +174,6 @@ function abrirPausa(t) {
   $('#pausa-nome').textContent = t.titulo;
   $('#p-notas').value = t.notas || '';
   $('#dlg-pausa').showModal();
-  setTimeout(() => $('#p-notas').focus(), 50);
 }
 
 $('#form-pausa').addEventListener('submit', async (e) => {
@@ -360,7 +359,6 @@ function abrirTarefa(t = null) {
   $('#lista-quem').innerHTML = nomes.map((n) => `<option value="${esc(n)}">`).join('');
 
   $('#dlg-tarefa').showModal();
-  setTimeout(() => $('#f-titulo').focus(), 50);
 }
 
 $('#fab').addEventListener('click', () => abrirTarefa());
