@@ -17,7 +17,6 @@ let aba = 'hoje';
 let editandoId = null;
 let pausandoId = null;
 let prazoSel = 'hoje';
-let tipoSel = 'simples';
 let logado = false;
 let canal = null;
 
@@ -210,7 +209,7 @@ function card(t) {
   const chips = [`<span class="chip st-${t.status}">${STATUS[t.status]}</span>`];
   if (t.prazo && !feita) chips.push(`<span class="chip ${atrasada ? 'chip-perigo' : ''}">📅 ${atrasada ? 'Atrasada · ' : ''}${fmtData(t.prazo)}</span>`);
   if (t.quem_pediu) chips.push(`<span class="chip">👤 ${esc(t.quem_pediu)}</span>`);
-  if (t.lembrar_em && !feita) chips.push(`<span class="chip">${t.tipo_aviso === 'alarme' ? '⏰' : '🔔'} ${fmtHora(t.lembrar_em)}</span>`);
+  if (t.lembrar_em && !feita) chips.push(`<span class="chip">⏰ ${fmtHora(t.lembrar_em)}</span>`);
   if (feita && t.concluido_em) chips.push(`<span class="chip">✓ ${fmtHora(t.concluido_em)}</span>`);
 
   const nota = t.notas
@@ -354,14 +353,7 @@ document.querySelectorAll('#chips-lembrar button').forEach((b) =>
   })
 );
 
-function setTipo(v) {
-  tipoSel = v;
-  document.querySelectorAll('#chips-tipo button').forEach((b) => b.classList.toggle('sel', b.dataset.tipo === v));
-}
-document.querySelectorAll('#chips-tipo button').forEach((b) => b.addEventListener('click', () => setTipo(b.dataset.tipo)));
-
 function abrirTarefa(t = null) {
-  setTipo(t?.tipo_aviso ?? 'simples');
   editandoId = t?.id ?? null;
   $('#dlg-titulo').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
   $('#f-titulo').value = t?.titulo ?? '';
@@ -397,7 +389,7 @@ $('#form-tarefa').addEventListener('submit', async (e) => {
     prazo: valorPrazo(),
     quem_pediu: $('#f-quem').value.trim() || null,
     lembrar_em: $('#f-lembrar').value ? new Date($('#f-lembrar').value).toISOString() : null,
-    tipo_aviso: tipoSel,
+    tipo_aviso: 'alarme',
   };
 
   const btn = $('#btn-salvar');
@@ -471,8 +463,14 @@ function base64ParaBytes(b64) {
 
 function atualizarSino() {
   const ok = 'Notification' in window && Notification.permission === 'granted';
-  $('#btn-notif').textContent = ok ? '🔔' : '🔕';
+  $('#btn-notif').textContent = '🔕';
+  $('#btn-notif').hidden = ok;           // lembretes ativos: o sino nem aparece
 }
+
+// Pede a permissão sozinho no primeiro toque depois de entrar (o celular exige um toque)
+document.addEventListener('click', () => {
+  if (logado && 'Notification' in window && Notification.permission === 'default') ativarNotificacoes(true);
+}, true);
 
 async function ativarNotificacoes(perguntar) {
   const avisa = (m) => { if (perguntar) toast(m); };
@@ -889,7 +887,18 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 9;
+const VERSAO_APP = 12;
+// Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
+function aplicarTema() {
+  const h = new Date().getHours();
+  const escuro = h >= 18 || h < 7;
+  document.documentElement.classList.toggle('escuro', escuro);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', escuro ? '#0b1120' : '#1d4ed8');
+}
+aplicarTema();
+setInterval(aplicarTema, 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) aplicarTema(); });
 // Atualização automática: ao abrir/voltar pro app, busca versão nova e recarrega sozinho
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
