@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=16';
+import { interpretarFala } from './voz.js?v=18';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -730,28 +730,121 @@ function salvarNotificados(s) {
   try { localStorage.setItem(NOTIF_KEY, JSON.stringify([...s].slice(-300))); } catch { /* sem armazenamento */ }
 }
 
-// Com o app aberto, mostra um aviso na tela (a notificação do celular vem do servidor)
-function avisar(t) {
-  toast(`${t.tipo_aviso === 'alarme' ? '⏰' : '🔔'} ${t.titulo}`);
+/* ---------- alarme DENTRO do app (funciona mesmo se o computador bloquear notificações) ---------- */
+const MAX_ALARMES = 12;
+let filaAlarme = [];
+let alarmeAtual = null;
+let somAlarme = null;
+let ctxAudio = null;
+let tituloOriginal = document.title;
+let piscaTitulo = null;
+
+// o navegador só libera som depois do primeiro toque/clique na página
+document.addEventListener('pointerdown', () => {
+  try {
+    ctxAudio ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (ctxAudio.state === 'suspended') ctxAudio.resume();
+  } catch { /* sem áudio */ }
+}, { capture: true });
+
+function bip() {
+  if (!ctxAudio || ctxAudio.state !== 'running') return;
+  const t0 = ctxAudio.currentTime;
+  [0, 0.25, 0.5].forEach((d) => {
+    const o = ctxAudio.createOscillator(), g = ctxAudio.createGain();
+    o.type = 'square'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, t0 + d);
+    g.gain.exponentialRampToValueAtTime(0.25, t0 + d + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.18);
+    o.connect(g).connect(ctxAudio.destination);
+    o.start(t0 + d); o.stop(t0 + d + 0.2);
+  });
+}
+function tocarAlarme() {
+  pararSom();
+  bip();
+  const inicio = Date.now();
+  somAlarme = setInterval(() => { if (Date.now() - inicio > 2 * 60000) pararSom(); else bip(); }, 1500);
+  let alterna = false;
+  piscaTitulo = setInterval(() => { document.title = (alterna = !alterna) ? '⏰ LEMBRETE!' : tituloOriginal; }, 1000);
+  if (navigator.vibrate) navigator.vibrate([600, 250, 600, 250, 900]);
+}
+function pararSom() {
+  clearInterval(somAlarme); somAlarme = null;
+  clearInterval(piscaTitulo); piscaTitulo = null;
+  document.title = tituloOriginal;
+}
+
+function mostrarAlarme(t) {
+  alarmeAtual = t;
+  $('#alarme-titulo').textContent = t.titulo;
+  const info = [];
+  if (t.quem_pediu) info.push(`Pedido de ${t.quem_pediu}`);
+  if (t.recorrencia) info.push(`🔁 ${descreverRec(t)}`);
+  if (t.prazo) info.push(`Prazo: ${fmtData(t.prazo)}`);
+  $('#alarme-info').textContent = info.join(' · ');
+  if (!$('#dlg-alarme').open) $('#dlg-alarme').showModal();
+  tocarAlarme();
+}
+function proximoAlarme() {
+  pararSom();
+  alarmeAtual = null;
+  if ($('#dlg-alarme').open) $('#dlg-alarme').close();
+  const prox = filaAlarme.shift();
+  if (prox) mostrarAlarme(prox);
+}
+function amanhaNoHorario(hora) {
+  const [hh, mm] = (hora || '08:00').split(':').map(Number);
+  const d = new Date(); d.setHours(hh, mm, 0, 0);
+  while (d <= new Date()) d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+$('#alarme-adiar').addEventListener('click', () => {
+  const t = alarmeAtual; proximoAlarme();
+  if (t) { atualizar(t.id, { lembrar_em: new Date(Date.now() + 10 * 60000).toISOString() }); toast('Adiado 10 min'); }
+});
+$('#alarme-parar').addEventListener('click', () => {
+  const t = alarmeAtual; proximoAlarme();
+  if (!t) return;
+  if (t.recorrencia) { atualizar(t.id, { lembrar_em: amanhaNoHorario(t.hora_aviso) }); toast('Parado por hoje · avisa de novo amanhã'); }
+  else { atualizar(t.id, { avisos_enviados: MAX_ALARMES }); toast('Alarme parado'); }
+});
+$('#alarme-concluir').addEventListener('click', () => {
+  const t = alarmeAtual; proximoAlarme();
+  if (t) concluir(t.id);
+});
+
+// alarme ainda "valendo": já passou da hora, não foi parado e não é muito antigo (evita disparar coisa velha)
+function alarmeValendo(t, agora) {
+  if (t.status === 'concluido' || !t.lembrar_em) return false;
+  const quando = new Date(t.lembrar_em).getTime();
+  return quando <= agora && agora - quando < 2 * 3600000 && (t.avisos_enviados ?? 0) < MAX_ALARMES;
 }
 
 function verificarLembretes() {
   const agora = Date.now();
+  // se o alarme aberto já foi resolvido em outro aparelho, fecha sozinho
+  if (alarmeAtual) {
+    const t = tarefas.find((x) => x.id === alarmeAtual.id);
+    if (!t || !alarmeValendo(t, agora)) proximoAlarme();
+  }
   const ja = lerNotificados();
   let mudou = false;
   for (const t of tarefas) {
-    if (t.status === 'concluido' || !t.lembrar_em) continue;
+    if (!alarmeValendo(t, agora)) continue;
     const chave = `${t.id}|${t.lembrar_em}`;
-    if (new Date(t.lembrar_em).getTime() <= agora && !ja.has(chave)) {
-      ja.add(chave);
-      mudou = true;
-      avisar(t);
-    }
+    if (ja.has(chave)) continue;
+    ja.add(chave);
+    mudou = true;
+    const notificacoesFuncionam = 'Notification' in window && Notification.permission === 'granted';
+    if (notificacoesFuncionam) { toast(`⏰ ${t.titulo}`); continue; }   // o alarme já chega pela notificação
+    if (alarmeAtual || filaAlarme.length) { if (alarmeAtual?.id !== t.id) filaAlarme.push(t); }
+    else mostrarAlarme(t);
   }
   if (mudou) salvarNotificados(ja);
 }
 
-setInterval(() => { if (logado) { verificarLembretes(); render(); } }, 30000);
+setInterval(() => { if (logado) { verificarLembretes(); render(); } }, 15000);
 
 /* ---------- notificações (push) ---------- */
 function base64ParaBytes(b64) {
@@ -845,7 +938,37 @@ const corDe = (n) => CORES_NOTA[n.cor] || CORES_NOTA.amarelo;
 const maxZ = () => notas.reduce((m, n) => Math.max(m, n.z || 0), 0);
 
 // Texto com negrito: só deixa passar formatação simples (segurança)
-const TAGS_OK = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'UL', 'OL', 'LI', 'SPAN']);
+const TAGS_OK = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'UL', 'OL', 'LI', 'SPAN', 'A']);
+const RE_LINK = /((?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:!?)\]])/gi;
+const hrefSeguro = (u) => {
+  const url = /^www\./i.test(u) ? 'https://' + u : u;
+  return /^https?:\/\//i.test(url) ? url : null;
+};
+// procura endereços no texto (fora de links) e transforma em <a>
+function linkificar(raiz, doc) {
+  const andar = (no) => {
+    [...no.childNodes].forEach((f) => {
+      if (f.nodeType === 1 && f.tagName !== 'A') andar(f);
+      if (f.nodeType !== 3 || !RE_LINK.test(f.nodeValue)) return;
+      RE_LINK.lastIndex = 0;
+      const frag = doc.createDocumentFragment();
+      let ultimo = 0;
+      f.nodeValue.replace(RE_LINK, (m, _g, pos) => {
+        frag.append(doc.createTextNode(f.nodeValue.slice(ultimo, pos)));
+        const a = doc.createElement('a');
+        a.setAttribute('href', hrefSeguro(m));
+        a.textContent = m;
+        frag.append(a);
+        ultimo = pos + m.length;
+        return m;
+      });
+      frag.append(doc.createTextNode(f.nodeValue.slice(ultimo)));
+      f.replaceWith(frag);
+    });
+  };
+  andar(raiz);
+  RE_LINK.lastIndex = 0;
+}
 function limparHtml(html) {
   const doc = new DOMParser().parseFromString(`<div>${html || ''}</div>`, 'text/html');
   const limpar = (no) => {
@@ -856,7 +979,12 @@ function limparHtml(html) {
         return;
       }
       const negrito = f.tagName === 'SPAN' && /font-weight:\s*(bold|[6-9]00)/i.test(f.getAttribute('style') || '');
+      const href = f.tagName === 'A' ? hrefSeguro(f.getAttribute('href') || '') : null;
       [...f.attributes].forEach((a) => f.removeAttribute(a.name));
+      if (f.tagName === 'A') {
+        if (!href) { limpar(f); f.replaceWith(...f.childNodes); return; }
+        f.setAttribute('href', href);
+      }
       limpar(f);
       if (f.tagName === 'SPAN') {
         if (negrito) { const b = doc.createElement('b'); b.append(...f.childNodes); f.replaceWith(b); }
@@ -866,12 +994,13 @@ function limparHtml(html) {
   };
   const raiz = doc.body.firstChild;
   limpar(raiz);
+  linkificar(raiz, doc);
   return raiz.innerHTML;
 }
 // notas antigas eram texto puro
 const htmlDaNota = (n) => {
   const t = n.texto || '';
-  return /<[a-z][\s\S]*>/i.test(t) ? limparHtml(t) : esc(t).replace(/\n/g, '<br>');
+  return limparHtml(/<[a-z][\s\S]*>/i.test(t) ? t : esc(t).replace(/\n/g, '<br>'));
 };
 const textoPuro = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent.trim(); };
 
@@ -975,6 +1104,18 @@ function renderGrade() {
     : `<div class="vazio"><strong>Nenhuma nota ainda</strong>Toque no + para criar um post-it.</div>`;
 }
 
+function abrirLink(a) {
+  const href = hrefSeguro(a.getAttribute('href') || '');
+  if (href) window.open(href, '_blank', 'noopener');
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.postit-texto a, .postit-card a, .n-texto a');
+  if (!a) return;
+  e.preventDefault();
+  e.stopPropagation();
+  abrirLink(a);
+}, true);
+
 $('#notas').addEventListener('click', (e) => {
   const card = e.target.closest('.postit-card');
   if (!card) return;
@@ -1067,7 +1208,12 @@ function criarPostit(n) {
   titulo.addEventListener('blur', () => enviarPendentes(n.id));
   titulo.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); texto.focus(); } });
   texto.addEventListener('input', () => salvarNotaDepois(n.id, { texto: limparHtml(texto.innerHTML) }, 700));
-  texto.addEventListener('blur', () => enviarPendentes(n.id));
+  texto.addEventListener('blur', () => {
+    const html = limparHtml(texto.innerHTML);
+    if (html !== texto.innerHTML) texto.innerHTML = html;
+    salvarNotaDepois(n.id, { texto: html }, 0);
+    enviarPendentes(n.id);
+  });
   texto.addEventListener('paste', (e) => {           // cola só o texto, sem formatação estranha
     e.preventDefault();
     document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
@@ -1216,7 +1362,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 16;
+const VERSAO_APP = 18;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {

@@ -20,7 +20,7 @@
       if (t === 'escuro' || (t === 'auto' && (h >= 18 || h < 7))) document.documentElement.classList.add('escuro');
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=18">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -242,6 +242,20 @@
     </div>
   </dialog>
 
+  <!-- ALARME DENTRO DO APP -->
+  <dialog id="dlg-alarme" class="alarme">
+    <div class="alca-vazia" tabindex="-1" autofocus></div>
+    <div class="alarme-icone">⏰</div>
+    <p class="alarme-rotulo">Lembrete</p>
+    <h2 id="alarme-titulo"></h2>
+    <p id="alarme-info" class="alarme-info"></p>
+    <div class="alarme-botoes">
+      <button type="button" id="alarme-adiar" class="btn primario">Adiar 10 min</button>
+      <button type="button" id="alarme-concluir" class="btn ok-btn">✓ Concluir</button>
+      <button type="button" id="alarme-parar" class="btn texto">Parar alarme</button>
+    </div>
+  </dialog>
+
   <!-- CONFIRMAÇÃO -->
   <dialog id="dlg-confirma" class="confirma">
     <div class="alca-vazia" tabindex="-1" autofocus></div>
@@ -254,6 +268,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=16"></script>
+  <script type="module" src="app.js?v=18"></script>
 </body>
 </html>

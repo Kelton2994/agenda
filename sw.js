@@ -1,5 +1,5 @@
 // Service worker: deixa o app instalável e abre rápido
-const CACHE = 'agenda-v16';
+const CACHE = 'agenda-v18';
 const ARQUIVOS = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.json', './voz.js', './icons/icon-192.png', './icons/icon-512.png'
