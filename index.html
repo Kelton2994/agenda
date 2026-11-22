@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -56,6 +56,7 @@
       <button data-aba="hoje" class="ativa">Hoje</button>
       <button data-aba="todas">Todas</button>
       <button data-aba="concluidas">Concluídas</button>
+      <button data-aba="notas">📝 Notas</button>
     </nav>
 
     <div id="busca-wrap" class="busca-wrap" hidden>
@@ -63,6 +64,7 @@
     </div>
 
     <main id="lista" class="lista"></main>
+    <section id="notas" class="notas" hidden></section>
 
     <button id="fab" class="fab" aria-label="Nova tarefa">+</button>
   </section>
@@ -148,8 +150,27 @@
     </form>
   </dialog>
 
+  <!-- NOTA (celular) -->
+  <dialog id="dlg-nota" class="sheet">
+    <form id="form-nota">
+      <div class="alca" tabindex="-1" autofocus></div>
+      <h2>Nota</h2>
+      <textarea id="n-texto" rows="8" placeholder="Escreva sua nota..."></textarea>
+      <div class="campo">
+        <span class="rotulo">Cor</span>
+        <div class="chips cores-nota" id="n-cores"></div>
+      </div>
+      <div class="rodape">
+        <button type="button" id="btn-nota-excluir" class="btn perigo">Excluir</button>
+        <span class="esp"></span>
+        <button type="button" id="btn-nota-fechar" class="btn texto">Cancelar</button>
+        <button type="submit" class="btn primario">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>

@@ -104,6 +104,8 @@ function mostrar(session) {
   } else if (!session) {
     logado = false;
     tarefas = [];
+    notas = [];
+    document.body.classList.remove('quadro-ativo');
     if (canal) { sb.removeChannel(canal); canal = null; }
     $('#tela-app').hidden = true;
     $('#tela-login').hidden = false;
@@ -132,6 +134,7 @@ function agendarRecarga() { clearTimeout(tRecarga); tRecarga = setTimeout(carreg
 function assinar() {
   canal = sb.channel('tarefas-mudancas')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, agendarRecarga)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notas' }, () => agendarNotas())
     .subscribe();
 }
 
@@ -251,6 +254,7 @@ function render() {
   const dataTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#data-hoje').textContent = dataTxt.charAt(0).toUpperCase() + dataTxt.slice(1);
 
+  if (aba === 'notas') return;
   let html = '';
   if (aba === 'hoje') {
     const usados = new Set();
@@ -281,7 +285,12 @@ document.querySelectorAll('.abas button').forEach((b) =>
   b.addEventListener('click', () => {
     aba = b.dataset.aba;
     document.querySelectorAll('.abas button').forEach((x) => x.classList.toggle('ativa', x === b));
-    $('#busca-wrap').hidden = aba === 'hoje';
+    $('#busca-wrap').hidden = aba === 'hoje' || aba === 'notas';
+    const emNotas = aba === 'notas';
+    $('#lista').hidden = emNotas;
+    $('#notas').hidden = !emNotas;
+    $('#fab').setAttribute('aria-label', emNotas ? 'Nova nota' : 'Nova tarefa');
+    if (emNotas) carregarNotas(); else document.body.classList.remove('quadro-ativo');
     render();
   })
 );
@@ -361,7 +370,7 @@ function abrirTarefa(t = null) {
   $('#dlg-tarefa').showModal();
 }
 
-$('#fab').addEventListener('click', () => abrirTarefa());
+$('#fab').addEventListener('click', () => (aba === 'notas' ? novaNota() : abrirTarefa()));
 $('#btn-cancelar').addEventListener('click', () => $('#dlg-tarefa').close());
 
 $('#form-tarefa').addEventListener('submit', async (e) => {
@@ -481,6 +490,271 @@ async function ativarNotificacoes(perguntar) {
 }
 
 $('#btn-notif').addEventListener('click', () => ativarNotificacoes(true));
+
+/* ---------- notas (post-its) ---------- */
+const CORES_NOTA = {
+  amarelo: '#fef08a', azul: '#bfdbfe', verde: '#bbf7d0',
+  rosa: '#fbcfe8', laranja: '#fed7aa', roxo: '#ddd6fe',
+};
+let notas = [];
+let notaEditandoId = null;
+let corNotaSel = 'amarelo';
+const ehQuadro = () => window.matchMedia('(min-width: 900px)').matches;
+const corDe = (n) => CORES_NOTA[n.cor] || CORES_NOTA.amarelo;
+const maxZ = () => notas.reduce((m, n) => Math.max(m, n.z || 0), 0);
+
+async function carregarNotas() {
+  const { data, error } = await sb.from('notas').select('*').order('z', { ascending: true });
+  if (error) { toast('Erro nas notas: ' + error.message); return; }
+  notas = data;
+  renderNotas();
+}
+
+let tNotas;
+function agendarNotas() {
+  clearTimeout(tNotas);
+  tNotas = setTimeout(() => { if (logado && aba === 'notas') carregarNotas(); }, 500);
+}
+
+async function salvarNota(id, campos) {
+  const n = notas.find((x) => x.id === id);
+  if (n) Object.assign(n, campos);
+  const { error } = await sb.from('notas').update({ ...campos, atualizado_em: agoraISO() }).eq('id', id);
+  if (error) toast('Nota não salvou: ' + error.message);
+}
+
+async function excluirNota(id) {
+  const { error } = await sb.from('notas').delete().eq('id', id);
+  if (error) { toast('Não excluiu: ' + error.message); return false; }
+  notas = notas.filter((n) => n.id !== id);
+  renderNotas();
+  return true;
+}
+
+function ajustarAlturaQuadro() {
+  const c = $('#notas');
+  if (c.dataset.modo !== 'quadro' || c.hidden) return;
+  c.style.height = Math.max(420, window.innerHeight - c.getBoundingClientRect().top - 16) + 'px';
+}
+
+function renderNotas() {
+  if (aba !== 'notas') return;
+  const c = $('#notas');
+  const modo = ehQuadro() ? 'quadro' : 'grade';
+  document.body.classList.toggle('quadro-ativo', modo === 'quadro');
+  if (c.dataset.modo !== modo) {
+    c.dataset.modo = modo;
+    c.style.height = '';
+    c.innerHTML = modo === 'quadro'
+      ? '<div class="quadro-area" id="quadro-area"></div><p class="dica-quadro" id="dica-quadro">Arraste pela barra de cima · puxe o canto para aumentar</p>'
+      : '<div class="grade" id="grade"></div>';
+  }
+  if (modo === 'quadro') { renderQuadro(); ajustarAlturaQuadro(); }
+  else renderGrade();
+}
+
+/* --- celular: grade --- */
+function renderGrade() {
+  const lista = [...notas].sort((a, b) => (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
+  $('#grade').innerHTML = lista.length
+    ? lista.map((n) => `<div class="postit-card" role="button" tabindex="0" data-id="${n.id}" style="background:${corDe(n)}">${
+        n.texto ? esc(n.texto) : '<span class="nota-vazia">Nota vazia</span>'}</div>`).join('')
+    : `<div class="vazio"><strong>Nenhuma nota ainda</strong>Toque no + para criar um post-it.</div>`;
+}
+
+$('#notas').addEventListener('click', (e) => {
+  const card = e.target.closest('.postit-card');
+  if (!card) return;
+  const n = notas.find((x) => x.id === card.dataset.id);
+  if (n) abrirNota(n);
+});
+
+function setCorNota(c) {
+  corNotaSel = c;
+  document.querySelectorAll('#n-cores button').forEach((b) => b.classList.toggle('sel', b.dataset.cor === c));
+}
+$('#n-cores').innerHTML = Object.entries(CORES_NOTA)
+  .map(([k, v]) => `<button type="button" class="cor-bolha" data-cor="${k}" style="background:${v}" aria-label="${k}"></button>`).join('');
+document.querySelectorAll('#n-cores button').forEach((b) => b.addEventListener('click', () => setCorNota(b.dataset.cor)));
+
+function abrirNota(n) {
+  notaEditandoId = n.id;
+  $('#n-texto').value = n.texto || '';
+  setCorNota(n.cor || 'amarelo');
+  $('#dlg-nota').showModal();
+}
+$('#form-nota').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = notaEditandoId;
+  $('#dlg-nota').close();
+  await salvarNota(id, { texto: $('#n-texto').value, cor: corNotaSel });
+  renderNotas();
+});
+$('#btn-nota-fechar').addEventListener('click', () => $('#dlg-nota').close());
+$('#btn-nota-excluir').addEventListener('click', async () => {
+  if (!confirm('Excluir esta nota?')) return;
+  $('#dlg-nota').close();
+  if (await excluirNota(notaEditandoId)) toast('Nota excluída');
+});
+
+/* --- computador: quadro --- */
+const observadorTamanho = new ResizeObserver((entradas) => {
+  for (const ent of entradas) {
+    const el = ent.target;
+    const n = notas.find((x) => x.id === el.dataset.id);
+    if (!n || el.classList.contains('arrastando')) continue;
+    const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+    if (Math.abs(w - n.largura) > 2 || Math.abs(h - n.altura) > 2) {
+      clearTimeout(el._tTam);
+      el._tTam = setTimeout(() => salvarNota(n.id, { largura: w, altura: h }), 500);
+    }
+  }
+});
+
+function criarPostit(n) {
+  const el = document.createElement('div');
+  el.className = 'postit';
+  el.dataset.id = n.id;
+  el.innerHTML = `
+    <div class="postit-barra" title="Arraste para mover">
+      <span class="pega">⠿</span>
+      <div class="postit-cores">${Object.entries(CORES_NOTA)
+        .map(([k, v]) => `<button type="button" data-cor="${k}" style="background:${v}" title="${k}"></button>`).join('')}</div>
+      <button type="button" class="postit-x" title="Excluir nota">✕</button>
+    </div>
+    <textarea placeholder="Escreva aqui..."></textarea>`;
+
+  const ta = el.querySelector('textarea');
+  ta.addEventListener('input', () => {
+    clearTimeout(el._tTxt);
+    el._tTxt = setTimeout(() => salvarNota(n.id, { texto: ta.value }), 600);
+  });
+  ta.addEventListener('blur', () => {
+    clearTimeout(el._tTxt);
+    const atual = notas.find((x) => x.id === n.id);
+    if (atual && atual.texto !== ta.value) salvarNota(n.id, { texto: ta.value });
+  });
+
+  el.querySelectorAll('.postit-cores button').forEach((b) =>
+    b.addEventListener('click', () => { el.style.background = CORES_NOTA[b.dataset.cor]; salvarNota(n.id, { cor: b.dataset.cor }); })
+  );
+  el.querySelector('.postit-x').addEventListener('click', async () => {
+    if (ta.value.trim() && !confirm('Excluir esta nota?')) return;
+    await excluirNota(n.id);
+  });
+
+  // trazer pra frente ao clicar
+  el.addEventListener('pointerdown', () => {
+    const atual = notas.find((x) => x.id === n.id);
+    const topo = maxZ();
+    if (atual && atual.z < topo) { el.style.zIndex = topo + 1; salvarNota(n.id, { z: topo + 1 }); }
+  });
+
+  // arrastar pela barra
+  const barra = el.querySelector('.postit-barra');
+  barra.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const inicioX = e.clientX, inicioY = e.clientY;
+    const origX = el.offsetLeft, origY = el.offsetTop;
+    el.classList.add('arrastando');
+    barra.setPointerCapture(e.pointerId);
+    const mover = (ev) => {
+      el.style.left = Math.max(0, origX + ev.clientX - inicioX) + 'px';
+      el.style.top = Math.max(0, origY + ev.clientY - inicioY) + 'px';
+    };
+    const soltar = () => {
+      barra.removeEventListener('pointermove', mover);
+      barra.removeEventListener('pointerup', soltar);
+      barra.removeEventListener('pointercancel', soltar);
+      el.classList.remove('arrastando');
+      salvarNota(n.id, { x: Math.round(el.offsetLeft), y: Math.round(el.offsetTop) });
+      ajustarTamanhoArea();
+    };
+    barra.addEventListener('pointermove', mover);
+    barra.addEventListener('pointerup', soltar);
+    barra.addEventListener('pointercancel', soltar);
+  });
+
+  observadorTamanho.observe(el);
+  return el;
+}
+
+function ajustarTamanhoArea() {
+  const area = $('#quadro-area');
+  if (!area) return;
+  let maxX = 0, maxY = 0;
+  area.querySelectorAll('.postit').forEach((el) => {
+    maxX = Math.max(maxX, el.offsetLeft + el.offsetWidth);
+    maxY = Math.max(maxY, el.offsetTop + el.offsetHeight);
+  });
+  area.style.width = maxX + 400 + 'px';
+  area.style.height = maxY + 300 + 'px';
+}
+
+function renderQuadro() {
+  const area = $('#quadro-area');
+  const ids = new Set(notas.map((n) => n.id));
+  area.querySelectorAll('.postit').forEach((el) => {
+    if (!ids.has(el.dataset.id)) { observadorTamanho.unobserve(el); el.remove(); }
+  });
+  for (const n of notas) {
+    let el = area.querySelector(`.postit[data-id="${n.id}"]`);
+    if (!el) { el = criarPostit(n); area.appendChild(el); }
+    if (el.classList.contains('arrastando')) continue;
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    if (Math.abs(el.offsetWidth - n.largura) > 2) el.style.width = n.largura + 'px';
+    if (Math.abs(el.offsetHeight - n.altura) > 2) el.style.height = n.altura + 'px';
+    el.style.zIndex = n.z;
+    el.style.background = corDe(n);
+    const ta = el.querySelector('textarea');
+    if (document.activeElement !== ta && ta.value !== (n.texto || '')) ta.value = n.texto || '';
+  }
+  $('#dica-quadro').textContent = notas.length
+    ? 'Arraste pela barra de cima · puxe o canto de baixo para aumentar'
+    : 'Quadro vazio — clique no + para colar o primeiro post-it';
+  ajustarTamanhoArea();
+}
+
+// procura um lugar vazio na parte visível do quadro (lado a lado, sem empilhar)
+function espacoLivre(c) {
+  const L = 230, A = 210, gap = 24;
+  const x0 = c.scrollLeft + gap, y0 = c.scrollTop + gap;
+  const colunas = Math.max(1, Math.floor((c.clientWidth - gap) / (L + gap)));
+  const sobrepoe = (x, y) => notas.some((n) =>
+    x < n.x + n.largura + 8 && x + L + 8 > n.x && y < n.y + n.altura + 8 && y + A + 8 > n.y);
+  for (let linha = 0; linha < 30; linha++) {
+    for (let col = 0; col < colunas; col++) {
+      const x = x0 + col * (L + gap), y = y0 + linha * (A + gap);
+      if (!sobrepoe(x, y)) return [Math.round(x), Math.round(y)];
+    }
+  }
+  return [Math.round(x0 + 30), Math.round(y0 + 30)];
+}
+
+async function novaNota() {
+  const quadro = ehQuadro();
+  const c = $('#notas');
+  let x = 40, y = 40;
+  if (quadro) [x, y] = espacoLivre(c);
+  const { data, error } = await sb.from('notas')
+    .insert({ texto: '', cor: 'amarelo', x, y, z: maxZ() + 1 }).select().single();
+  if (error) { toast('Não criou a nota: ' + error.message); return; }
+  notas.push(data);
+  renderNotas();
+  if (quadro) {
+    const ta = document.querySelector(`.postit[data-id="${data.id}"] textarea`);
+    if (ta) ta.focus();
+  } else {
+    abrirNota(data);
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (aba !== 'notas') return;
+  renderNotas();
+});
 
 /* ---------- início ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
