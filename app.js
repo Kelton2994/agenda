@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=18';
+import { interpretarFala } from './voz.js?v=19';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -333,7 +333,7 @@ function card(t) {
 
 function secao(titulo, itens, classe = '') {
   if (!itens.length) return '';
-  return `<div class="secao-titulo ${classe}"><span><i class="ponto"></i>${titulo}</span><span class="contador">${itens.length}</span></div>${itens.map(card).join('')}`;
+  return `<section class="secao"><div class="secao-titulo ${classe}"><span><i class="ponto"></i>${titulo}</span><span class="contador">${itens.length}</span></div><div class="cards">${itens.map(card).join('')}</div></section>`;
 }
 
 function filtroBusca(lista) {
@@ -382,7 +382,7 @@ function render() {
     const [nome, fn] = filtros[filtroTile];
     const lista = abertas.filter(fn);
     html = `<div class="filtro-ativo">Mostrando: <b>${nome}</b> (${lista.length})<button type="button" data-limpar-filtro>✕ Limpar filtro</button></div>`;
-    html += lista.length ? lista.map(card).join('') : `<div class="vazio"><strong>Nada aqui 🎉</strong>Nenhuma tarefa ${nome.toLowerCase()}.</div>`;
+    html += lista.length ? `<div class="cards">${lista.map(card).join('')}</div>` : `<div class="vazio"><strong>Nada aqui 🎉</strong>Nenhuma tarefa ${nome.toLowerCase()}.</div>`;
     $('#lista').innerHTML = html;
     return;
   }
@@ -859,7 +859,7 @@ function mostrarStatusNotif() {
   const el = $('#menu-notif');
   if (!('Notification' in window)) { el.innerHTML = '<p>Este navegador não tem notificações.</p>'; return; }
   const p = Notification.permission;
-  if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p><button type="button" id="menu-testar" class="menu-item">🧪 Testar notificação neste aparelho</button>';
+  if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p>';
   else if (p === 'default') el.innerHTML = '<button type="button" id="menu-ativar" class="menu-item">🔔 Ativar lembretes</button>';
   else el.innerHTML = `<p class="aviso-txt">Bloqueados pelo navegador deste aparelho.</p>
     <p class="ajuda-txt">No computador: clique no cadeado 🔒 ao lado do endereço → Notificações → Permitir → F5.<br>
@@ -868,19 +868,7 @@ function mostrarStatusNotif() {
 }
 document.addEventListener('click', async (e) => {
   if (e.target.closest('#menu-ativar')) ativarNotificacoes(true).then(mostrarStatusNotif);
-  if (e.target.closest('#menu-testar')) {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification('🧪 Teste da Minha Agenda', {
-        body: 'Se você está vendo isto, este aparelho mostra notificações.',
-        icon: 'icons/icon-192.png', tag: 'teste', requireInteraction: false,
-      });
-      toast('Teste enviado — deve aparecer no canto da tela agora');
-      ativarNotificacoes(false);   // aproveita e renova o registro deste aparelho no servidor
-    } catch (err) {
-      toast('Não consegui mostrar o teste: ' + (err.message || err));
-    }
-  }
+
 });
 
 // Pede a permissão sozinho no primeiro toque depois de entrar (o celular exige um toque)
@@ -1362,7 +1350,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 18;
+const VERSAO_APP = 19;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {
