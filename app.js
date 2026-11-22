@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
+import { interpretarFala } from './voz.js?v=14';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -155,7 +156,18 @@ $('#btn-criar-conta').addEventListener('click', async () => {
   else if (!data.session) msgLogin('Conta criada! Abra o link que chegou no seu e-mail e depois clique em Entrar.');
 });
 
-$('#btn-sair').addEventListener('click', async () => {
+function marcarTema() {
+  document.querySelectorAll('#chips-tema button').forEach((b) => b.classList.toggle('sel', b.dataset.tema === temaEscolhido()));
+}
+$('#btn-menu').addEventListener('click', () => { marcarTema(); $('#dlg-menu').showModal(); });
+$('#menu-fechar').addEventListener('click', () => $('#dlg-menu').close());
+$('#dlg-menu').addEventListener('click', (e) => { if (e.target === $('#dlg-menu')) $('#dlg-menu').close(); });
+document.querySelectorAll('#chips-tema button').forEach((b) => b.addEventListener('click', () => {
+  try { localStorage.setItem('agenda-tema', b.dataset.tema); } catch { /* sem armazenamento */ }
+  aplicarTema(); marcarTema();
+}));
+$('#menu-sair').addEventListener('click', async () => {
+  $('#dlg-menu').close();
   if (await confirmar('Sair da conta neste aparelho?', 'Sair')) await sb.auth.signOut();
 });
 
@@ -207,22 +219,30 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && logado) carregar();
 });
 
-async function atualizar(id, campos, recarregar = true) {
-  const { error } = await sb.from('tarefas').update({ ...campos, atualizado_em: agoraISO() }).eq('id', id);
-  if (error) { toast('Não salvou: ' + error.message); return false; }
-  if (recarregar) await carregar();
+// Atualiza NA HORA na tela e salva no servidor em segundo plano (sem travar)
+async function atualizar(id, campos) {
+  const t = tarefas.find((x) => x.id === id);
+  const antes = t ? { ...t } : null;
+  const agora = agoraISO();
+  if (t) { Object.assign(t, campos, { atualizado_em: agora }); render(); }
+  const { error } = await sb.from('tarefas').update({ ...campos, atualizado_em: agora }).eq('id', id);
+  if (error) {
+    if (t && antes) { Object.assign(t, antes); render(); }
+    toast('Não salvou (sem internet?): ' + error.message);
+    return false;
+  }
   return true;
 }
 
 /* ---------- ações rápidas ---------- */
 async function comecar(id) {
   const outras = tarefas.filter((t) => t.status === 'fazendo' && t.id !== id);
+  outras.forEach((t) => { t.status = 'pausado'; });
   if (outras.length) {
-    await sb.from('tarefas').update({ status: 'pausado', atualizado_em: agoraISO() })
-      .eq('status', 'fazendo').neq('id', id);
+    toast(`"${outras[0].titulo}" foi para Pausadas`);
+    sb.from('tarefas').update({ status: 'pausado', atualizado_em: agoraISO() }).eq('status', 'fazendo').neq('id', id).then(() => {});
   }
   await atualizar(id, { status: 'fazendo' });
-  if (outras.length) toast(`"${outras[0].titulo}" foi para Pausadas`);
 }
 
 async function concluirRecorrente(t) {
@@ -230,25 +250,25 @@ async function concluirRecorrente(t) {
   let proximo = proximaOcorrencia(t, t.prazo || ontem());
   while (proximo <= h) proximo = proximaOcorrencia(t, proximo);
   const agora = agoraISO();
-  await sb.from('tarefas_historico').insert({ tarefa_id: t.id, prazo: t.prazo, concluido_em: agora });
-  const ok = await atualizar(t.id, {
+  sb.from('tarefas_historico').insert({ tarefa_id: t.id, prazo: t.prazo, concluido_em: agora }).then(() => {});
+  atualizar(t.id, {
     status: 'a_fazer', concluido_em: null, ultima_conclusao: agora,
     prazo: proximo, lembrar_em: primeiroAviso(t, proximo).toISOString(),
   });
-  if (ok) {
-    const ini = inicioAvisos(t, proximo);
-    toast(`Feito ✓ Próximo prazo ${fmtDiaMes(proximo)} · avisos a partir de ${pad2(ini.getDate())}/${pad2(ini.getMonth() + 1)}`);
-  }
+  const ini = inicioAvisos(t, proximo);
+  toast(`Feito ✓ Próximo prazo ${fmtDiaMes(proximo)} · avisos a partir de ${pad2(ini.getDate())}/${pad2(ini.getMonth() + 1)}`);
 }
 
 async function concluir(id) {
   const t = tarefas.find((x) => x.id === id);
   if (t?.recorrencia) return concluirRecorrente(t);
-  if (await atualizar(id, { status: 'concluido', concluido_em: agoraISO() })) toast('Concluída ✓');
+  atualizar(id, { status: 'concluido', concluido_em: agoraISO() });
+  toast('Concluída ✓');
 }
 
 async function pularAmanha(id) {
-  if (await atualizar(id, { prazo: amanha() })) toast('Passou para amanhã');
+  atualizar(id, { prazo: amanha() });
+  toast('Passou para amanhã');
 }
 
 async function reabrir(id) {
@@ -337,8 +357,10 @@ function render() {
     <button type="button" data-filtro="abertas" class="tile ${sel('abertas')}"><b>${abertas.length}</b><span>Abertas</span></button>`;
   const hora = new Date().getHours();
   $('#saudacao').textContent = hora < 12 ? 'Bom dia 👋' : hora < 18 ? 'Boa tarde 👋' : 'Boa noite 👋';
-  const dataTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  $('#data-hoje').textContent = dataTxt.charAt(0).toUpperCase() + dataTxt.slice(1);
+  const d0 = new Date();
+  const semana = d0.toLocaleDateString('pt-BR', { weekday: 'long' }).replace('-feira', '');
+  const mesCurto = d0.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+  $('#data-hoje').textContent = `${semana.charAt(0).toUpperCase() + semana.slice(1)}, ${d0.getDate()} ${mesCurto}`;
 
   if (termoBusca.trim()) {
     $('#lista').hidden = false;
@@ -402,6 +424,7 @@ document.querySelectorAll('.abas button').forEach((b) =>
     $('#lista').hidden = emNotas;
     $('#notas').hidden = !emNotas;
     $('#fab').setAttribute('aria-label', emNotas ? 'Nova nota' : 'Nova tarefa');
+    $('#fab-voz').hidden = emNotas;
     if (emNotas) carregarNotas();
     render();
   })
@@ -468,7 +491,7 @@ $('#lista').addEventListener('click', (e) => {
   const el = e.target.closest('.card');
   if (!alvo || !el) return;
   const t = tarefas.find((x) => x.id === el.dataset.id);
-  if (!t) return;
+  if (!t || String(t.id).startsWith('tmp-')) return;
   const acao = alvo.dataset.acao;
   if (acao === 'editar') abrirTarefa(t);
   else if (acao === 'fazer') comecar(t.id);
@@ -541,6 +564,7 @@ document.querySelectorAll('#chips-repetir button').forEach((b) => b.addEventList
 ['#f-dia-mes', '#f-dia-semana', '#f-dias-antes', '#f-hora-aviso'].forEach((id) => $(id).addEventListener('input', atualizarDicaRec));
 
 function abrirTarefa(t = null) {
+  statusVoz('');
   $('#f-dia-mes').value = t?.dia_mes ?? 15;
   $('#f-dia-semana').value = String(t?.dia_semana ?? 1);
   $('#f-dias-antes').value = t?.avisar_dias_antes ?? 5;
@@ -571,6 +595,7 @@ function abrirTarefa(t = null) {
 
 $('#fab').addEventListener('click', () => (aba === 'notas' ? novaNota() : abrirTarefa()));
 $('#btn-cancelar').addEventListener('click', () => $('#dlg-tarefa').close());
+$('#dlg-tarefa').addEventListener('close', () => { if (ouvindo) ouvindo.abort(); });
 
 $('#form-tarefa').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -603,35 +628,98 @@ $('#form-tarefa').addEventListener('submit', async (e) => {
     Object.assign(campos, { recorrencia: null, dia_mes: null, dia_semana: null });
   }
 
-  const btn = $('#btn-salvar');
-  btn.disabled = true;
-  let ok;
+  $('#dlg-tarefa').close();          // fecha NA HORA; o salvamento continua em segundo plano
   if (editandoId) {
     const antes = tarefas.find((t) => t.id === editandoId);
     campos.status = $('#f-status').value;
     campos.notas = $('#f-notas').value.trim() || null;
     if (campos.status === 'concluido' && antes?.status !== 'concluido') campos.concluido_em = agoraISO();
     if (campos.status !== 'concluido') campos.concluido_em = null;
-    ok = await atualizar(editandoId, campos);
-  } else {
-    const { error } = await sb.from('tarefas').insert(campos);
-    if (error) toast('Não salvou: ' + error.message);
-    ok = !error;
-    if (ok) await carregar();
+    atualizar(editandoId, campos);
+    return;
   }
-  btn.disabled = false;
-  if (ok) { $('#dlg-tarefa').close(); if (!editandoId) toast('Anotada ✓'); }
+  const temp = { id: 'tmp-' + Date.now(), status: 'a_fazer', notas: null, criado_em: agoraISO(), concluido_em: null, ...campos };
+  tarefas.push(temp);
+  render();
+  toast(campos.lembrar_em ? `Anotada ✓ · lembrete ${fmtHora(campos.lembrar_em)}` : 'Anotada ✓');
+  const { data, error } = await sb.from('tarefas').insert(campos).select().single();
+  if (error) {
+    tarefas = tarefas.filter((t) => t !== temp);
+    render();
+    toast('Não salvou (sem internet?): ' + error.message);
+    return;
+  }
+  Object.assign(temp, data);
+  render();
 });
 
 $('#btn-excluir').addEventListener('click', async () => {
   const t = tarefas.find((x) => x.id === editandoId);
   if (!t || !(await confirmar(`Excluir "${t.titulo}"? Não dá para desfazer.`, 'Excluir', true))) return;
-  const { error } = await sb.from('tarefas').delete().eq('id', t.id);
-  if (error) { toast('Não excluiu: ' + error.message); return; }
   $('#dlg-tarefa').close();
-  await carregar();
+  const pos = tarefas.indexOf(t);
+  tarefas = tarefas.filter((x) => x !== t);
+  render();
   toast('Excluída');
+  const { error } = await sb.from('tarefas').delete().eq('id', t.id);
+  if (error) { tarefas.splice(pos, 0, t); render(); toast('Não excluiu: ' + error.message); }
 });
+
+/* ---------- criar tarefa falando ---------- */
+const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
+let ouvindo = null;
+if (!Reconhecimento) { $('#btn-voz').hidden = true; $('#fab-voz').hidden = true; }
+
+function statusVoz(msg) { const el = $('#voz-status'); el.hidden = !msg; el.textContent = msg || ''; }
+
+function aplicarFala(frase) {
+  const { titulo, quando } = interpretarFala(frase);
+  $('#f-titulo').value = titulo || frase;
+  if (quando) {
+    $('#f-lembrar').value = paraInputLocal(quando);
+    const iso = isoLocal(quando);
+    if (iso === hoje()) setPrazo('hoje');
+    else if (iso === amanha()) setPrazo('amanha');
+    else { $('#f-prazo').value = iso; setPrazo('data'); }
+    statusVoz(`✓ Entendi: lembrete ${quando.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Confira e toque em Salvar.`);
+  } else {
+    statusVoz('✓ Entendi. Não ouvi horário — escolha o lembrete abaixo, se quiser.');
+  }
+}
+
+function ouvir() {
+  if (!Reconhecimento) return;
+  if (ouvindo) { ouvindo.stop(); return; }
+  const r = new Reconhecimento();
+  r.lang = 'pt-BR';
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+  let final = '';
+  ouvindo = r;
+  $('#btn-voz').classList.add('ouvindo');
+  statusVoz('🎙️ Pode falar… (ex.: "ligar pro RH amanhã às 9")');
+  r.onresult = (e) => {
+    let parcial = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else parcial += e.results[i][0].transcript;
+    }
+    $('#f-titulo').value = (final + parcial).trim();
+  };
+  r.onerror = (e) => {
+    statusVoz(e.error === 'not-allowed' || e.error === 'service-not-allowed'
+      ? 'Microfone bloqueado. Libere em Configurações > Aplicativos > Agenda > Permissões.'
+      : e.error === 'no-speech' ? 'Não ouvi nada. Toque no 🎤 e fale de novo.' : 'Não deu pra ouvir agora (precisa de internet). Tente de novo.');
+  };
+  r.onend = () => {
+    ouvindo = null;
+    $('#btn-voz').classList.remove('ouvindo');
+    if (final.trim()) aplicarFala(final.trim());
+  };
+  r.start();
+}
+$('#btn-voz').addEventListener('click', ouvir);
+$('#fab-voz').addEventListener('click', () => { abrirTarefa(); ouvir(); });
 
 /* ---------- lembretes ---------- */
 const NOTIF_KEY = 'agenda-notificados';
@@ -1100,11 +1188,13 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 13;
+const VERSAO_APP = 14;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
+function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {
   const h = new Date().getHours();
-  const escuro = h >= 18 || h < 7;
+  const pref = temaEscolhido();
+  const escuro = pref === 'escuro' || (pref === 'auto' && (h >= 18 || h < 7));
   document.documentElement.classList.toggle('escuro', escuro);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', escuro ? '#0b1120' : '#1d4ed8');

@@ -14,9 +14,13 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <script>
     // tema pelo horário: escuro das 18h às 07h (aplicado antes de desenhar a tela)
-    (function () { var h = new Date().getHours(); if (h >= 18 || h < 7) document.documentElement.classList.add('escuro'); })();
+    (function () {
+      var t = 'auto'; try { t = localStorage.getItem('agenda-tema') || 'auto'; } catch (e) {}
+      var h = new Date().getHours();
+      if (t === 'escuro' || (t === 'auto' && (h >= 18 || h < 7))) document.documentElement.classList.add('escuro');
+    })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -53,7 +57,7 @@
         <div class="topo-acoes">
           <button id="btn-busca" class="icone" aria-label="Pesquisar">🔍</button>
           <button id="btn-notif" class="icone" aria-label="Ativar lembretes">🔔</button>
-          <button id="btn-sair" class="icone" aria-label="Sair">Sair</button>
+          <button id="btn-menu" class="icone" aria-label="Mais opções">⋯</button>
         </div>
       </div>
       <div id="resumo" class="resumo"></div>
@@ -80,6 +84,7 @@
     <p class="versao-app"></p>
     <section id="notas" class="notas" hidden></section>
 
+    <button id="fab-voz" class="fab-voz" aria-label="Criar tarefa falando">🎤</button>
     <button id="fab" class="fab" aria-label="Nova tarefa">+</button>
   </section>
 
@@ -89,9 +94,12 @@
       <div class="alca" tabindex="-1" autofocus></div>
       <h2 id="dlg-titulo">Nova tarefa</h2>
 
-      <label>O que precisa fazer?
+      <label for="f-titulo">O que precisa fazer?</label>
+      <div class="titulo-voz">
         <input id="f-titulo" required autocomplete="off" placeholder="Ex.: Relatório de absenteísmo pro gerente">
-      </label>
+        <button type="button" id="btn-voz" class="btn-voz" aria-label="Falar">🎤</button>
+      </div>
+      <p id="voz-status" class="voz-status" hidden></p>
 
       <div class="campo">
         <span class="rotulo">Repetir</span>
@@ -218,6 +226,21 @@
     </form>
   </dialog>
 
+  <!-- MENU ⋯ -->
+  <dialog id="dlg-menu" class="sheet menu">
+    <div class="menu-corpo">
+      <div class="alca" tabindex="-1" autofocus></div>
+      <p class="menu-titulo">Tema</p>
+      <div class="chips" id="chips-tema">
+        <button type="button" data-tema="auto">🌗 Automático <small>(claro 07h–18h)</small></button>
+        <button type="button" data-tema="claro">☀️ Sempre claro</button>
+        <button type="button" data-tema="escuro">🌙 Sempre escuro</button>
+      </div>
+      <button type="button" id="menu-sair" class="menu-item perigo-txt">Sair da conta</button>
+      <button type="button" id="menu-fechar" class="menu-item">Fechar</button>
+    </div>
+  </dialog>
+
   <!-- CONFIRMAÇÃO -->
   <dialog id="dlg-confirma" class="confirma">
     <div class="alca-vazia" tabindex="-1" autofocus></div>
@@ -230,6 +253,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=13"></script>
+  <script type="module" src="app.js?v=14"></script>
 </body>
 </html>
