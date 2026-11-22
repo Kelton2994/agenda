@@ -20,7 +20,7 @@
       if (t === 'escuro' || (t === 'auto' && (h >= 18 || h < 7))) document.documentElement.classList.add('escuro');
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -56,7 +56,6 @@
         </div>
         <div class="topo-acoes">
           <button id="btn-busca" class="icone" aria-label="Pesquisar">🔍</button>
-          <button id="btn-notif" class="icone" aria-label="Ativar lembretes">🔔</button>
           <button id="btn-menu" class="icone" aria-label="Mais opções">⋯</button>
         </div>
       </div>
@@ -236,6 +235,8 @@
         <button type="button" data-tema="claro">☀️ Sempre claro</button>
         <button type="button" data-tema="escuro">🌙 Sempre escuro</button>
       </div>
+      <p class="menu-titulo">Lembretes neste aparelho</p>
+      <div id="menu-notif" class="menu-notif"></div>
       <button type="button" id="menu-sair" class="menu-item perigo-txt">Sair da conta</button>
       <button type="button" id="menu-fechar" class="menu-item">Fechar</button>
     </div>
@@ -253,6 +254,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=14"></script>
+  <script type="module" src="app.js?v=15"></script>
 </body>
 </html>

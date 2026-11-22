@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=14';
+import { interpretarFala } from './voz.js?v=15';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -159,7 +159,7 @@ $('#btn-criar-conta').addEventListener('click', async () => {
 function marcarTema() {
   document.querySelectorAll('#chips-tema button').forEach((b) => b.classList.toggle('sel', b.dataset.tema === temaEscolhido()));
 }
-$('#btn-menu').addEventListener('click', () => { marcarTema(); $('#dlg-menu').showModal(); });
+$('#btn-menu').addEventListener('click', () => { marcarTema(); mostrarStatusNotif(); $('#dlg-menu').showModal(); });
 $('#menu-fechar').addEventListener('click', () => $('#dlg-menu').close());
 $('#dlg-menu').addEventListener('click', (e) => { if (e.target === $('#dlg-menu')) $('#dlg-menu').close(); });
 document.querySelectorAll('#chips-tema button').forEach((b) => b.addEventListener('click', () => {
@@ -760,11 +760,22 @@ function base64ParaBytes(b64) {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-function atualizarSino() {
-  const ok = 'Notification' in window && Notification.permission === 'granted';
-  $('#btn-notif').textContent = '🔕';
-  $('#btn-notif').hidden = ok;           // lembretes ativos: o sino nem aparece
+// Sem sino na tela: o estado dos lembretes fica só no menu ⋯
+function atualizarSino() { if ($('#dlg-menu').open) mostrarStatusNotif(); }
+function mostrarStatusNotif() {
+  const el = $('#menu-notif');
+  if (!('Notification' in window)) { el.innerHTML = '<p>Este navegador não tem notificações.</p>'; return; }
+  const p = Notification.permission;
+  if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p>';
+  else if (p === 'default') el.innerHTML = '<button type="button" id="menu-ativar" class="menu-item">🔔 Ativar lembretes</button>';
+  else el.innerHTML = `<p class="aviso-txt">Bloqueados pelo navegador deste aparelho.</p>
+    <p class="ajuda-txt">No computador: clique no cadeado 🔒 ao lado do endereço → Notificações → Permitir → F5.<br>
+    No celular: Configurações → Aplicativos → Agenda → Notificações → ligar.<br>
+    Se aparecer "gerenciado pela organização", quem bloqueia é a TI da empresa.</p>`;
 }
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#menu-ativar')) ativarNotificacoes(true).then(mostrarStatusNotif);
+});
 
 // Pede a permissão sozinho no primeiro toque depois de entrar (o celular exige um toque)
 document.addEventListener('click', () => {
@@ -781,7 +792,11 @@ async function ativarNotificacoes(perguntar) {
   if (permissao === 'default' && perguntar) permissao = await Notification.requestPermission();
   atualizarSino();
   if (permissao !== 'granted') {
-    avisa('Notificações bloqueadas. Libere em Configurações > Apps > Notificações.');
+    if (perguntar) {
+      let jaAvisou = false;
+      try { jaAvisou = localStorage.getItem('agenda-aviso-bloqueio') === '1'; localStorage.setItem('agenda-aviso-bloqueio', '1'); } catch { /* ok */ }
+      if (!jaAvisou) toast('Lembretes bloqueados neste aparelho — veja como liberar no menu ⋯');
+    }
     return;
   }
   try {
@@ -800,7 +815,7 @@ async function ativarNotificacoes(perguntar) {
   }
 }
 
-$('#btn-notif').addEventListener('click', () => ativarNotificacoes(true));
+
 
 /* ---------- notas (post-its) ---------- */
 const CORES_NOTA = {
@@ -1188,7 +1203,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 14;
+const VERSAO_APP = 15;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {

@@ -499,3 +499,8 @@ dialog.menu .menu-corpo { padding: 12px 20px calc(20px + env(safe-area-inset-bot
 #chips-tema small { font-weight: 500; opacity: .75; }
 .menu-item { display: block; width: 100%; text-align: left; border: 0; background: var(--card-2); color: var(--texto); font-weight: 700; padding: 14px; border-radius: 14px; margin-top: 8px; }
 .perigo-txt { color: var(--perigo); }
+.menu-notif p { margin: 0 0 8px; font-size: 14px; }
+.ok-txt { color: var(--ok); font-weight: 700; }
+.aviso-txt { color: var(--perigo); font-weight: 700; }
+.ajuda-txt { color: var(--muted); font-size: 13px !important; line-height: 1.5; }
+.menu-notif { margin-bottom: 14px; }
