@@ -58,6 +58,22 @@ function toast(msg) {
   tToast = setTimeout(() => (t.hidden = true), 3500);
 }
 
+/* ---------- confirmação do próprio app ---------- */
+function confirmar(mensagem, textoOk = 'Confirmar', perigo = false) {
+  return new Promise((resolve) => {
+    const dlg = $('#dlg-confirma');
+    $('#confirma-msg').textContent = mensagem;
+    const ok = $('#confirma-ok');
+    ok.textContent = textoOk;
+    ok.className = 'btn ' + (perigo ? 'perigo-forte' : 'primario');
+    const fim = (v) => { dlg.close(); ok.onclick = null; $('#confirma-cancelar').onclick = null; resolve(v); };
+    ok.onclick = () => fim(true);
+    $('#confirma-cancelar').onclick = () => fim(false);
+    dlg.oncancel = (e) => { e.preventDefault(); fim(false); };
+    dlg.showModal();
+  });
+}
+
 /* ---------- login ---------- */
 function msgLogin(m) { $('#login-msg').textContent = m; }
 function traduz(e) {
@@ -90,7 +106,7 @@ $('#btn-criar-conta').addEventListener('click', async () => {
 });
 
 $('#btn-sair').addEventListener('click', async () => {
-  if (confirm('Sair da conta neste aparelho?')) await sb.auth.signOut();
+  if (await confirmar('Sair da conta neste aparelho?', 'Sair')) await sb.auth.signOut();
 });
 
 function mostrar(session) {
@@ -407,7 +423,7 @@ $('#form-tarefa').addEventListener('submit', async (e) => {
 
 $('#btn-excluir').addEventListener('click', async () => {
   const t = tarefas.find((x) => x.id === editandoId);
-  if (!t || !confirm(`Excluir "${t.titulo}"? Não dá para desfazer.`)) return;
+  if (!t || !(await confirmar(`Excluir "${t.titulo}"? Não dá para desfazer.`, 'Excluir', true))) return;
   const { error } = await sb.from('tarefas').delete().eq('id', t.id);
   if (error) { toast('Não excluiu: ' + error.message); return; }
   $('#dlg-tarefa').close();
@@ -457,7 +473,6 @@ function base64ParaBytes(b64) {
 function atualizarSino() {
   const ok = 'Notification' in window && Notification.permission === 'granted';
   $('#btn-notif').textContent = ok ? '🔔' : '🔕';
-  $('#btn-notif').title = ok ? 'Lembretes ativos' : 'Ativar lembretes';
 }
 
 async function ativarNotificacoes(perguntar) {
@@ -592,7 +607,7 @@ $('#form-nota').addEventListener('submit', async (e) => {
 });
 $('#btn-nota-fechar').addEventListener('click', () => $('#dlg-nota').close());
 $('#btn-nota-excluir').addEventListener('click', async () => {
-  if (!confirm('Excluir esta nota?')) return;
+  if (!(await confirmar('Excluir esta nota?', 'Excluir', true))) return;
   $('#dlg-nota').close();
   if (await excluirNota(notaEditandoId)) toast('Nota excluída');
 });
@@ -616,11 +631,11 @@ function criarPostit(n) {
   el.className = 'postit';
   el.dataset.id = n.id;
   el.innerHTML = `
-    <div class="postit-barra" title="Arraste para mover">
+    <div class="postit-barra">
       <span class="pega">⠿</span>
       <div class="postit-cores">${Object.entries(CORES_NOTA)
-        .map(([k, v]) => `<button type="button" data-cor="${k}" style="background:${v}" title="${k}"></button>`).join('')}</div>
-      <button type="button" class="postit-x" title="Excluir nota">✕</button>
+        .map(([k, v]) => `<button type="button" data-cor="${k}" style="background:${v}" aria-label="${k}"></button>`).join('')}</div>
+      <button type="button" class="postit-x" aria-label="Excluir nota">✕</button>
     </div>
     <textarea placeholder="Escreva aqui..."></textarea>`;
 
@@ -639,7 +654,7 @@ function criarPostit(n) {
     b.addEventListener('click', () => { el.style.background = CORES_NOTA[b.dataset.cor]; salvarNota(n.id, { cor: b.dataset.cor }); })
   );
   el.querySelector('.postit-x').addEventListener('click', async () => {
-    if (ta.value.trim() && !confirm('Excluir esta nota?')) return;
+    if (ta.value.trim() && !(await confirmar('Excluir esta nota?', 'Excluir', true))) return;
     await excluirNota(n.id);
   });
 

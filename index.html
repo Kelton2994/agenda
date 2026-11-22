@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -45,8 +45,8 @@
           <h1 id="data-hoje">Minha Agenda</h1>
         </div>
         <div class="topo-acoes">
-          <button id="btn-notif" class="icone" title="Ativar lembretes" aria-label="Ativar lembretes">🔔</button>
-          <button id="btn-sair" class="icone" title="Sair" aria-label="Sair">Sair</button>
+          <button id="btn-notif" class="icone" aria-label="Ativar lembretes">🔔</button>
+          <button id="btn-sair" class="icone" aria-label="Sair">Sair</button>
         </div>
       </div>
       <div id="resumo" class="resumo"></div>
@@ -169,8 +169,18 @@
     </form>
   </dialog>
 
+  <!-- CONFIRMAÇÃO -->
+  <dialog id="dlg-confirma" class="confirma">
+    <div class="alca-vazia" tabindex="-1" autofocus></div>
+    <p id="confirma-msg"></p>
+    <div class="confirma-botoes">
+      <button type="button" id="confirma-cancelar" class="btn texto">Cancelar</button>
+      <button type="button" id="confirma-ok" class="btn primario">Confirmar</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>
