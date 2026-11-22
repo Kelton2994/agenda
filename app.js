@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=15';
+import { interpretarFala } from './voz.js?v=16';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -766,15 +766,28 @@ function mostrarStatusNotif() {
   const el = $('#menu-notif');
   if (!('Notification' in window)) { el.innerHTML = '<p>Este navegador não tem notificações.</p>'; return; }
   const p = Notification.permission;
-  if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p>';
+  if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p><button type="button" id="menu-testar" class="menu-item">🧪 Testar notificação neste aparelho</button>';
   else if (p === 'default') el.innerHTML = '<button type="button" id="menu-ativar" class="menu-item">🔔 Ativar lembretes</button>';
   else el.innerHTML = `<p class="aviso-txt">Bloqueados pelo navegador deste aparelho.</p>
     <p class="ajuda-txt">No computador: clique no cadeado 🔒 ao lado do endereço → Notificações → Permitir → F5.<br>
     No celular: Configurações → Aplicativos → Agenda → Notificações → ligar.<br>
     Se aparecer "gerenciado pela organização", quem bloqueia é a TI da empresa.</p>`;
 }
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   if (e.target.closest('#menu-ativar')) ativarNotificacoes(true).then(mostrarStatusNotif);
+  if (e.target.closest('#menu-testar')) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('🧪 Teste da Minha Agenda', {
+        body: 'Se você está vendo isto, este aparelho mostra notificações.',
+        icon: 'icons/icon-192.png', tag: 'teste', requireInteraction: false,
+      });
+      toast('Teste enviado — deve aparecer no canto da tela agora');
+      ativarNotificacoes(false);   // aproveita e renova o registro deste aparelho no servidor
+    } catch (err) {
+      toast('Não consegui mostrar o teste: ' + (err.message || err));
+    }
+  }
 });
 
 // Pede a permissão sozinho no primeiro toque depois de entrar (o celular exige um toque)
@@ -1203,7 +1216,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 15;
+const VERSAO_APP = 16;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {
