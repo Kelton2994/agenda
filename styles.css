@@ -404,3 +404,5 @@ dialog.confirma::backdrop { background: rgba(2,6,23,.55); backdrop-filter: blur(
 .postit-etiqueta, .postit-etiqueta:empty { display: block; flex: 1 1 auto; min-width: 0; }
 .postit-ferramentas { margin-left: 0; }
 .postit-x { margin-left: 2px; }
+.versao-app { text-align: center; font-size: 11px; color: var(--muted); opacity: .7; margin: 24px 0 8px; }
+#notas:not([hidden]) ~ .versao-app, .lista[hidden] + .versao-app { display: none; }

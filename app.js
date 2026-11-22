@@ -889,7 +889,22 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+const VERSAO_APP = 9;
+// Atualização automática: ao abrir/voltar pro app, busca versão nova e recarrega sozinho
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+    const checar = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checar(); });
+    setInterval(checar, 30 * 60 * 1000);
+  }).catch(() => {});
+  let recarregou = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recarregou) return;
+    recarregou = true;
+    window.location.reload();
+  });
+}
+document.querySelectorAll('.versao-app').forEach((e) => (e.textContent = `Minha Agenda · versão ${VERSAO_APP}`));
 
 if (SUPABASE_URL.includes('SEU-PROJETO')) {
   $('#tela-login').hidden = false;
