@@ -17,6 +17,9 @@ let aba = 'hoje';
 let editandoId = null;
 let pausandoId = null;
 let prazoSel = 'hoje';
+let repSel = '';
+let filtroTile = null;
+let termoBusca = '';
 let logado = false;
 let canal = null;
 
@@ -46,6 +49,54 @@ function paraInputLocal(ts) {
 }
 const agoraISO = () => new Date().toISOString();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- repetição (mensal / semanal) ---------- */
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const pad2 = (n) => String(n).padStart(2, '0');
+const ontem = () => { const d = new Date(); d.setDate(d.getDate() - 1); return isoLocal(d); };
+const ultimoDiaMes = (a, m) => new Date(a, m, 0).getDate(); // m = 1..12
+function descreverRec(t) {
+  if (t.recorrencia === 'mensal') return `Todo dia ${t.dia_mes}`;
+  const d = Number(t.dia_semana);
+  return `${d === 0 || d === 6 ? 'Todo' : 'Toda'} ${DIAS_SEMANA[d]}`;
+}
+// primeira data da regra DEPOIS de 'depoisDe' (YYYY-MM-DD)
+function proximaOcorrencia(t, depoisDe) {
+  const [a, m, d] = depoisDe.split('-').map(Number);
+  if (t.recorrencia === 'mensal') {
+    let ano = a, mes = m;
+    for (let i = 0; i < 14; i++) {
+      const dia = Math.min(Number(t.dia_mes) || 1, ultimoDiaMes(ano, mes));
+      const iso = `${ano}-${pad2(mes)}-${pad2(dia)}`;
+      if (iso > depoisDe) return iso;
+      mes++; if (mes > 12) { mes = 1; ano++; }
+    }
+  }
+  const base = new Date(a, m - 1, d);
+  for (let i = 1; i <= 7; i++) {
+    const x = new Date(a, m - 1, d + i);
+    if (x.getDay() === Number(t.dia_semana)) return isoLocal(x);
+  }
+  return isoLocal(base);
+}
+// quando começam os avisos: prazo - dias antes, no horário escolhido
+function inicioAvisos(t, prazo) {
+  const [a, m, d] = prazo.split('-').map(Number);
+  const [hh, mm] = (t.hora_aviso || '08:00').split(':').map(Number);
+  return new Date(a, m - 1, d - (Number(t.avisar_dias_antes) || 0), hh, mm, 0, 0);
+}
+function primeiroAviso(t, prazo) {
+  let x = inicioAvisos(t, prazo);
+  const agora = new Date();
+  if (x <= agora) {               // já está no período de aviso: próximo horário (hoje ou amanhã)
+    const [hh, mm] = (t.hora_aviso || '08:00').split(':').map(Number);
+    x = new Date(); x.setHours(hh, mm, 0, 0);
+    if (x <= agora) x.setDate(x.getDate() + 1);
+  }
+  return x;
+}
+const emPeriodoDeAviso = (t) => t.recorrencia && t.prazo && isoLocal(inicioAvisos(t, t.prazo)) <= hoje();
+const fmtDiaMes = (iso) => { const [, m, d] = iso.split('-'); return `${d}/${m}`; };
 
 /* ---------- aviso ---------- */
 let tToast;
@@ -174,7 +225,25 @@ async function comecar(id) {
   if (outras.length) toast(`"${outras[0].titulo}" foi para Pausadas`);
 }
 
+async function concluirRecorrente(t) {
+  const h = hoje();
+  let proximo = proximaOcorrencia(t, t.prazo || ontem());
+  while (proximo <= h) proximo = proximaOcorrencia(t, proximo);
+  const agora = agoraISO();
+  await sb.from('tarefas_historico').insert({ tarefa_id: t.id, prazo: t.prazo, concluido_em: agora });
+  const ok = await atualizar(t.id, {
+    status: 'a_fazer', concluido_em: null, ultima_conclusao: agora,
+    prazo: proximo, lembrar_em: primeiroAviso(t, proximo).toISOString(),
+  });
+  if (ok) {
+    const ini = inicioAvisos(t, proximo);
+    toast(`Feito ✓ Próximo prazo ${fmtDiaMes(proximo)} · avisos a partir de ${pad2(ini.getDate())}/${pad2(ini.getMonth() + 1)}`);
+  }
+}
+
 async function concluir(id) {
+  const t = tarefas.find((x) => x.id === id);
+  if (t?.recorrencia) return concluirRecorrente(t);
   if (await atualizar(id, { status: 'concluido', concluido_em: agoraISO() })) toast('Concluída ✓');
 }
 
@@ -209,6 +278,8 @@ function card(t) {
   const chips = [`<span class="chip st-${t.status}">${STATUS[t.status]}</span>`];
   if (t.prazo && !feita) chips.push(`<span class="chip ${atrasada ? 'chip-perigo' : ''}">📅 ${atrasada ? 'Atrasada · ' : ''}${fmtData(t.prazo)}</span>`);
   if (t.quem_pediu) chips.push(`<span class="chip">👤 ${esc(t.quem_pediu)}</span>`);
+  if (t.recorrencia) chips.push(`<span class="chip chip-rec">🔁 ${descreverRec(t)}</span>`);
+  if (t.recorrencia && t.ultima_conclusao) chips.push(`<span class="chip chip-ok">✓ Último: ${fmtHora(t.ultima_conclusao).slice(0, 5)}</span>`);
   if (t.lembrar_em && !feita) chips.push(`<span class="chip">⏰ ${fmtHora(t.lembrar_em)}</span>`);
   if (feita && t.concluido_em) chips.push(`<span class="chip">✓ ${fmtHora(t.concluido_em)}</span>`);
 
@@ -225,7 +296,7 @@ function card(t) {
         ? `<button data-acao="pausar">⏸ Pausar</button>`
         : `<button data-acao="fazer">▶ ${t.status === 'pausado' ? 'Retomar' : 'Fazer'}</button>`,
       `<button data-acao="concluir" class="ok">✓ Concluir</button>`,
-      t.prazo !== amanha() ? `<button data-acao="amanha">→ Amanhã</button>` : '',
+      t.prazo !== amanha() && !t.recorrencia ? `<button data-acao="amanha">→ Amanhã</button>` : '',
     ].join('');
   }
 
@@ -258,18 +329,41 @@ function render() {
   const atrasadas = abertas.filter((t) => t.prazo && t.prazo < h);
   const paraHoje = abertas.filter((t) => t.prazo === h);
   const pausadas = abertas.filter((t) => t.status === 'pausado');
+  const sel = (f) => (filtroTile === f ? 'tile-sel' : '');
   $('#resumo').innerHTML = `
-    <div class="tile ${atrasadas.length ? 'tile-perigo' : ''}"><b>${atrasadas.length}</b><span>Atrasadas</span></div>
-    <div class="tile"><b>${paraHoje.length}</b><span>Pra hoje</span></div>
-    <div class="tile ${pausadas.length ? 'tile-alerta' : ''}"><b>${pausadas.length}</b><span>Pausadas</span></div>
-    <div class="tile"><b>${abertas.length}</b><span>Abertas</span></div>`;
+    <button type="button" data-filtro="atrasadas" class="tile ${atrasadas.length ? 'tile-perigo' : ''} ${sel('atrasadas')}"><b>${atrasadas.length}</b><span>Atrasadas</span></button>
+    <button type="button" data-filtro="hoje" class="tile ${sel('hoje')}"><b>${paraHoje.length}</b><span>Pra hoje</span></button>
+    <button type="button" data-filtro="pausadas" class="tile ${pausadas.length ? 'tile-alerta' : ''} ${sel('pausadas')}"><b>${pausadas.length}</b><span>Pausadas</span></button>
+    <button type="button" data-filtro="abertas" class="tile ${sel('abertas')}"><b>${abertas.length}</b><span>Abertas</span></button>`;
   const hora = new Date().getHours();
   $('#saudacao').textContent = hora < 12 ? 'Bom dia 👋' : hora < 18 ? 'Boa tarde 👋' : 'Boa noite 👋';
   const dataTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#data-hoje').textContent = dataTxt.charAt(0).toUpperCase() + dataTxt.slice(1);
 
+  if (termoBusca.trim()) {
+    $('#lista').hidden = false;
+    $('#notas').hidden = true;
+    $('#lista').innerHTML = resultadoBusca(termoBusca);
+    return;
+  }
+  $('#lista').hidden = aba === 'notas';
+  $('#notas').hidden = aba !== 'notas';
   if (aba === 'notas') return;
   let html = '';
+  if (aba === 'todas' && filtroTile) {
+    const filtros = {
+      atrasadas: ['Atrasadas', (t) => t.prazo && t.prazo < h],
+      hoje: ['Pra hoje', (t) => t.prazo === h],
+      pausadas: ['Pausadas', (t) => t.status === 'pausado'],
+      abertas: ['Abertas', () => true],
+    };
+    const [nome, fn] = filtros[filtroTile];
+    const lista = abertas.filter(fn);
+    html = `<div class="filtro-ativo">Mostrando: <b>${nome}</b> (${lista.length})<button type="button" data-limpar-filtro>✕ Limpar filtro</button></div>`;
+    html += lista.length ? lista.map(card).join('') : `<div class="vazio"><strong>Nada aqui 🎉</strong>Nenhuma tarefa ${nome.toLowerCase()}.</div>`;
+    $('#lista').innerHTML = html;
+    return;
+  }
   if (aba === 'hoje') {
     const usados = new Set();
     const pega = (fn) => abertas.filter((t) => !usados.has(t.id) && fn(t)).map((t) => (usados.add(t.id), t));
@@ -279,7 +373,10 @@ function render() {
     html += secao('Pausadas — você parou no meio', pega((t) => t.status === 'pausado'));
     html += secao('Aguardando alguém', pega((t) => t.status === 'aguardando'));
     html += secao('Amanhã', pega((t) => t.prazo === am));
+    html += secao('Repetitivas — já no período de aviso', pega((t) => emPeriodoDeAviso(t)));
     html += secao('Sem prazo', pega((t) => !t.prazo));
+    const futuras = abertas.filter((t) => !usados.has(t.id) && t.recorrencia);
+    if (futuras.length) html += `<p class="dica-futuras">🔁 ${futuras.length} tarefa(s) repetitiva(s) aguardando o período de aviso — veja em "Todas".</p>`;
     if (!html) html = `<div class="vazio"><strong>Tudo em dia 🎉</strong>Quando alguém te pedir algo, toque no + e anote na hora.</div>`;
   } else if (aba === 'todas') {
     const lista = filtroBusca(abertas);
@@ -298,8 +395,9 @@ function render() {
 document.querySelectorAll('.abas button').forEach((b) =>
   b.addEventListener('click', () => {
     aba = b.dataset.aba;
+    filtroTile = null;
     document.querySelectorAll('.abas button').forEach((x) => x.classList.toggle('ativa', x === b));
-    $('#busca-wrap').hidden = aba === 'hoje' || aba === 'notas';
+    $('#busca-wrap').hidden = true;
     const emNotas = aba === 'notas';
     $('#lista').hidden = emNotas;
     $('#notas').hidden = !emNotas;
@@ -310,7 +408,62 @@ document.querySelectorAll('.abas button').forEach((b) =>
 );
 $('#busca').addEventListener('input', render);
 
+function irParaAba(nome) {
+  aba = nome;
+  document.querySelectorAll('.abas button').forEach((x) => x.classList.toggle('ativa', x.dataset.aba === nome));
+  $('#fab').setAttribute('aria-label', nome === 'notas' ? 'Nova nota' : 'Nova tarefa');
+}
+$('#resumo').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-filtro]');
+  if (!t) return;
+  fecharBusca(false);
+  filtroTile = filtroTile === t.dataset.filtro && aba === 'todas' ? null : t.dataset.filtro;
+  irParaAba(filtroTile ? 'todas' : 'hoje');
+  render();
+});
+
+/* ---------- pesquisa rápida (tarefas + notas) ---------- */
+const normalizar = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function resultadoBusca(termo) {
+  const q = normalizar(termo.trim());
+  const achaT = tarefas.filter((t) => normalizar(`${t.titulo} ${t.quem_pediu || ''} ${t.notas || ''}`).includes(q));
+  const achaN = notas.filter((n) => normalizar(`${n.titulo || ''} ${textoPuro(htmlDaNota(n))}`).includes(q));
+  let html = `<div class="busca-resumo">${achaT.length + achaN.length} resultado(s) para <b>"${esc(termo.trim())}"</b></div>`;
+  if (achaT.length) {
+    const abertas = achaT.filter((t) => t.status !== 'concluido');
+    const feitas = achaT.filter((t) => t.status === 'concluido');
+    html += secao('Tarefas', abertas);
+    html += secao('Tarefas concluídas', feitas);
+  }
+  if (achaN.length) {
+    html += `<div class="secao-titulo"><span><i class="ponto"></i>Notas</span><span class="contador">${achaN.length}</span></div><div class="res-notas">` +
+      achaN.map((n) => `<div class="res-nota ${n.destaque ? 'd-' + n.destaque : ''}" role="button" tabindex="0" data-nota-id="${n.id}" style="background:${corDe(n)}">
+        ${etiquetaDestaque(n)}${n.titulo ? `<div class="card-nota-titulo">${esc(n.titulo)}</div>` : ''}
+        <div class="card-nota-texto">${esc(textoPuro(htmlDaNota(n))).slice(0, 160)}</div></div>`).join('') + '</div>';
+  }
+  if (!achaT.length && !achaN.length) html += `<div class="vazio"><strong>Nada encontrado</strong>Tente outra palavra.</div>`;
+  return html;
+}
+function abrirBusca() {
+  $('#barra-busca').hidden = false;
+  $('#busca-global').focus();
+  if (!notas.length) carregarNotas().then(render);
+}
+function fecharBusca(renderizar = true) {
+  termoBusca = '';
+  $('#busca-global').value = '';
+  $('#barra-busca').hidden = true;
+  if (renderizar) { render(); if (aba === 'notas') renderNotas(); }
+}
+$('#btn-busca').addEventListener('click', () => ($('#barra-busca').hidden ? abrirBusca() : fecharBusca()));
+$('#busca-fechar').addEventListener('click', () => fecharBusca());
+$('#busca-global').addEventListener('input', (e) => { termoBusca = e.target.value; render(); if (!termoBusca.trim() && aba === 'notas') renderNotas(); });
+$('#busca-global').addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharBusca(); });
+
 $('#lista').addEventListener('click', (e) => {
+  if (e.target.closest('[data-limpar-filtro]')) { filtroTile = null; render(); return; }
+  const rn = e.target.closest('[data-nota-id]');
+  if (rn) { const n = notas.find((x) => x.id === rn.dataset.notaId); if (n) abrirNota(n); return; }
   const alvo = e.target.closest('[data-acao]');
   const el = e.target.closest('.card');
   if (!alvo || !el) return;
@@ -353,7 +506,46 @@ document.querySelectorAll('#chips-lembrar button').forEach((b) =>
   })
 );
 
+function setRep(v, inicial = false) {
+  repSel = v || '';
+  document.querySelectorAll('#chips-repetir button').forEach((b) => b.classList.toggle('sel', b.dataset.rep === repSel));
+  $('#campos-recorrencia').hidden = !repSel;
+  $('#campo-prazo').hidden = !!repSel;
+  $('#campo-lembrar').hidden = !!repSel;
+  $('#lbl-dia-mes').hidden = repSel !== 'mensal';
+  $('#lbl-dia-semana').hidden = repSel !== 'semanal';
+  if (!inicial) {
+    if (repSel === 'semanal' && $('#f-dias-antes').value === '5') $('#f-dias-antes').value = '1';
+    if (repSel === 'mensal' && $('#f-dias-antes').value === '1') $('#f-dias-antes').value = '5';
+  }
+  atualizarDicaRec();
+}
+function regraDoFormulario() {
+  return {
+    recorrencia: repSel,
+    dia_mes: Math.min(31, Math.max(1, parseInt($('#f-dia-mes').value, 10) || 1)),
+    dia_semana: Number($('#f-dia-semana').value),
+    avisar_dias_antes: Math.min(31, Math.max(0, parseInt($('#f-dias-antes').value, 10) || 0)),
+    hora_aviso: $('#f-hora-aviso').value || '08:00',
+  };
+}
+function atualizarDicaRec() {
+  if (!repSel) return;
+  const r = regraDoFormulario();
+  const prazo = proximaOcorrencia(r, ontem());
+  const ini = inicioAvisos(r, prazo);
+  $('#dica-rec').textContent =
+    `Próximo prazo: ${fmtDiaMes(prazo)}. Vai avisar todo dia às ${r.hora_aviso} a partir de ${pad2(ini.getDate())}/${pad2(ini.getMonth() + 1)}, até você concluir. Ao concluir, pula pro próximo ${repSel === 'mensal' ? 'mês' : 'semana'}.`;
+}
+document.querySelectorAll('#chips-repetir button').forEach((b) => b.addEventListener('click', () => setRep(b.dataset.rep)));
+['#f-dia-mes', '#f-dia-semana', '#f-dias-antes', '#f-hora-aviso'].forEach((id) => $(id).addEventListener('input', atualizarDicaRec));
+
 function abrirTarefa(t = null) {
+  $('#f-dia-mes').value = t?.dia_mes ?? 15;
+  $('#f-dia-semana').value = String(t?.dia_semana ?? 1);
+  $('#f-dias-antes').value = t?.avisar_dias_antes ?? 5;
+  $('#f-hora-aviso').value = t?.hora_aviso ?? '08:00';
+  setRep(t?.recorrencia || '', true);
   editandoId = t?.id ?? null;
   $('#dlg-titulo').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
   $('#f-titulo').value = t?.titulo ?? '';
@@ -391,6 +583,25 @@ $('#form-tarefa').addEventListener('submit', async (e) => {
     lembrar_em: $('#f-lembrar').value ? new Date($('#f-lembrar').value).toISOString() : null,
     tipo_aviso: 'alarme',
   };
+
+  if (repSel) {
+    const r = regraDoFormulario();
+    const antes = editandoId ? tarefas.find((t) => t.id === editandoId) : null;
+    const mesmaRegra = antes && antes.recorrencia === r.recorrencia && antes.dia_mes === (r.recorrencia === 'mensal' ? r.dia_mes : null) &&
+      antes.dia_semana === (r.recorrencia === 'semanal' ? r.dia_semana : null);
+    const prazo = antes?.recorrencia && antes.prazo && (mesmaRegra || antes.prazo < hoje()) ? antes.prazo : proximaOcorrencia(r, ontem());
+    Object.assign(campos, {
+      recorrencia: r.recorrencia,
+      dia_mes: r.recorrencia === 'mensal' ? r.dia_mes : null,
+      dia_semana: r.recorrencia === 'semanal' ? r.dia_semana : null,
+      avisar_dias_antes: r.avisar_dias_antes,
+      hora_aviso: r.hora_aviso,
+      prazo,
+      lembrar_em: primeiroAviso(r, prazo).toISOString(),
+    });
+  } else {
+    Object.assign(campos, { recorrencia: null, dia_mes: null, dia_semana: null });
+  }
 
   const btn = $('#btn-salvar');
   btn.disabled = true;
@@ -597,6 +808,7 @@ async function excluirNota(id) {
   if (error) { toast('Não excluiu: ' + error.message); return false; }
   notas = notas.filter((n) => n.id !== id);
   renderNotas();
+  if (termoBusca) render();
   return true;
 }
 
@@ -694,6 +906,7 @@ $('#form-nota').addEventListener('submit', async (e) => {
     destaque: destaqueSel || null,
   });
   renderNotas();
+  if (termoBusca) render();
 });
 $('#btn-nota-fechar').addEventListener('click', () => $('#dlg-nota').close());
 $('#btn-nota-excluir').addEventListener('click', async () => {
@@ -887,7 +1100,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 12;
+const VERSAO_APP = 13;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function aplicarTema() {
   const h = new Date().getHours();

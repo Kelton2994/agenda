@@ -16,7 +16,7 @@
     // tema pelo horário: escuro das 18h às 07h (aplicado antes de desenhar a tela)
     (function () { var h = new Date().getHours(); if (h >= 18 || h < 7) document.documentElement.classList.add('escuro'); })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -51,12 +51,19 @@
           <h1 id="data-hoje">Minha Agenda</h1>
         </div>
         <div class="topo-acoes">
+          <button id="btn-busca" class="icone" aria-label="Pesquisar">🔍</button>
           <button id="btn-notif" class="icone" aria-label="Ativar lembretes">🔔</button>
           <button id="btn-sair" class="icone" aria-label="Sair">Sair</button>
         </div>
       </div>
       <div id="resumo" class="resumo"></div>
     </header>
+
+    <div id="barra-busca" class="barra-busca" hidden>
+      <span class="lupa">🔍</span>
+      <input id="busca-global" type="search" placeholder="Pesquisar em tarefas e notas..." autocomplete="off" enterkeyhint="search">
+      <button type="button" id="busca-fechar" class="btn texto">Fechar</button>
+    </div>
 
     <nav class="abas">
       <button data-aba="hoje" class="ativa">Hoje</button>
@@ -87,6 +94,36 @@
       </label>
 
       <div class="campo">
+        <span class="rotulo">Repetir</span>
+        <div class="chips" id="chips-repetir">
+          <button type="button" data-rep="">Não repete</button>
+          <button type="button" data-rep="mensal">🔁 Todo mês</button>
+          <button type="button" data-rep="semanal">🔁 Toda semana</button>
+        </div>
+      </div>
+
+      <div id="campos-recorrencia" class="caixa-rec" hidden>
+        <div class="linha-2">
+          <label id="lbl-dia-mes">Dia do mês
+            <input type="number" id="f-dia-mes" min="1" max="31" value="15" inputmode="numeric">
+          </label>
+          <label id="lbl-dia-semana" hidden>Dia da semana
+            <select id="f-dia-semana">
+              <option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option>
+              <option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option>
+            </select>
+          </label>
+          <label>Avisar quantos dias antes
+            <input type="number" id="f-dias-antes" min="0" max="31" value="5" inputmode="numeric">
+          </label>
+        </div>
+        <label>Horário do aviso (todo dia, até você concluir)
+          <input type="time" id="f-hora-aviso" value="08:00">
+        </label>
+        <p class="dica-rec" id="dica-rec"></p>
+      </div>
+
+      <div class="campo" id="campo-prazo">
         <span class="rotulo">Prazo</span>
         <div class="chips" id="chips-prazo">
           <button type="button" data-prazo="hoje">Hoje</button>
@@ -102,7 +139,7 @@
       </label>
       <datalist id="lista-quem"></datalist>
 
-      <div class="campo">
+      <div class="campo" id="campo-lembrar">
         <label>Me lembrar em
           <input type="datetime-local" id="f-lembrar">
         </label>
@@ -193,6 +230,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=12"></script>
+  <script type="module" src="app.js?v=13"></script>
 </body>
 </html>
