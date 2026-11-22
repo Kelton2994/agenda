@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -154,8 +154,20 @@
   <dialog id="dlg-nota" class="sheet">
     <form id="form-nota">
       <div class="alca" tabindex="-1" autofocus></div>
-      <h2>Nota</h2>
-      <textarea id="n-texto" rows="8" placeholder="Escreva sua nota..."></textarea>
+      <input id="n-titulo" class="n-titulo" placeholder="Título" autocomplete="off">
+      <div class="editor-barra">
+        <button type="button" class="btn-b" data-cmd="bold"><b>B</b></button>
+        <span class="editor-dica">Selecione um trecho e toque em B para negrito</span>
+      </div>
+      <div id="n-texto" class="n-texto" contenteditable="true" data-placeholder="Escreva sua nota..."></div>
+      <div class="campo">
+        <span class="rotulo">Destaque</span>
+        <div class="chips" id="n-destaque">
+          <button type="button" data-destaque="">Normal</button>
+          <button type="button" data-destaque="importante">⭐ Importante</button>
+          <button type="button" data-destaque="urgente">🔴 Urgente</button>
+        </div>
+      </div>
       <div class="campo">
         <span class="rotulo">Cor</span>
         <div class="chips cores-nota" id="n-cores"></div>
@@ -181,6 +193,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=7"></script>
+  <script type="module" src="app.js?v=8"></script>
 </body>
 </html>

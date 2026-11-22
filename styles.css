@@ -216,11 +216,6 @@ dialog.sheet h2 { margin: 6px 0 18px; font-size: 20px; letter-spacing: -.01em; }
 .notas { padding: 6px 14px 0; }
 
 /* Computador: quadro */
-body.quadro-ativo #tela-app { max-width: none; padding-bottom: 0; }
-body.quadro-ativo .topo { border-radius: 0 0 22px 22px; }
-body.quadro-ativo .resumo { max-width: 620px; }
-body.quadro-ativo .abas { max-width: 620px; }
-body.quadro-ativo .fab { right: 34px; bottom: 30px; }
 .notas[data-modo="quadro"] {
   position: relative; margin: 12px 14px 16px; padding: 0; overflow: auto;
   border-radius: 20px; border: 1px solid var(--borda);
@@ -250,16 +245,8 @@ body.quadro-ativo .fab { right: 34px; bottom: 30px; }
 }
 .postit.arrastando .postit-barra { cursor: grabbing; }
 .pega { color: rgba(0,0,0,.35); font-size: 14px; letter-spacing: -1px; }
-.postit-cores { display: flex; gap: 5px; opacity: 0; transition: opacity .15s; }
-.postit:hover .postit-cores, .postit:focus-within .postit-cores { opacity: 1; }
-.postit-cores button { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,.25); padding: 0; }
-.postit-x { margin-left: auto; border: 0; background: transparent; color: rgba(0,0,0,.4); font-size: 14px; padding: 2px 4px; border-radius: 6px; }
+.postit-x { margin-left: 2px; border: 0; background: transparent; color: rgba(0,0,0,.4); font-size: 14px; padding: 2px 4px; border-radius: 6px; }
 .postit-x:hover { background: rgba(0,0,0,.08); color: #b91c1c; }
-.postit textarea, .postit textarea:focus {
-  flex: 1; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; resize: none;
-  padding: 10px 12px; font-size: 15px; line-height: 1.45; color: #1f2937; outline: none;
-}
-.postit textarea::placeholder { color: rgba(31,41,55,.45); }
 
 /* Celular: grade */
 .grade { columns: 2; column-gap: 10px; padding-top: 10px; }
@@ -271,7 +258,6 @@ body.quadro-ativo .fab { right: 34px; bottom: 30px; }
 }
 .grade .vazio { column-span: all; }
 .nota-vazia { color: rgba(31,41,55,.45); font-style: italic; }
-#n-texto { min-height: 180px; font-size: 16px; line-height: 1.45; }
 .cores-nota .cor-bolha { width: 38px; height: 38px; border-radius: 50%; padding: 0; border: 2px solid rgba(0,0,0,.12); }
 .cores-nota .cor-bolha.sel { border-color: transparent; box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--azul); }
 
@@ -322,6 +308,99 @@ dialog.confirma::backdrop { background: rgba(2,6,23,.55); backdrop-filter: blur(
   .topo-linha > div:first-child { order: 1; margin-right: auto; }
   .abas { margin-top: 12px; max-width: 520px; }
   .abas button { padding: 8px; }
-  body.quadro-ativo .abas { max-width: 520px; }
-  body.quadro-ativo .topo { border-radius: 0; }
 }
+
+/* ===== Layout igual em todas as abas (computador) ===== */
+@media (min-width: 900px) {
+  #tela-app { max-width: none; padding-bottom: 0; }
+  .topo { border-radius: 0; }
+  .abas { margin: 12px 16px 4px; max-width: 520px; }
+  .lista, .busca-wrap { max-width: 1040px; padding-left: 16px; padding-right: 16px; }
+  .notas[data-modo="quadro"] { margin: 12px 16px 16px; }
+  .fab { right: 34px; bottom: 30px; }
+}
+
+/* ===== Post-it v2 ===== */
+[contenteditable] { -webkit-user-select: text; user-select: text; outline: none; }
+[contenteditable]:empty::before { content: attr(data-placeholder); color: rgba(31,41,55,.42); pointer-events: none; }
+
+.postit-barra { gap: 6px; min-height: 32px; }
+.postit-etiqueta:empty { display: none; }
+.postit-ferramentas { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .15s; margin-left: auto; }
+.postit:hover .postit-ferramentas, .postit:focus-within .postit-ferramentas { opacity: 1; }
+.ferr { border: 0; background: rgba(255,255,255,.55); color: #1f2937; height: 22px; min-width: 24px; padding: 0 5px; border-radius: 6px; font-size: 12px; line-height: 1; }
+.ferr:hover { background: rgba(255,255,255,.9); }
+.ferr.ativo { background: #1f2937; color: #fff; }
+.sep { width: 1px; height: 14px; background: rgba(0,0,0,.15); margin: 0 2px; }
+.bolinha { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,.25); padding: 0; }
+
+.postit-titulo, .postit-titulo:focus {
+  margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none;
+  padding: 10px 12px 2px; font-size: 16px; font-weight: 800; color: #111827;
+}
+.postit-titulo::placeholder { color: rgba(17,24,39,.35); font-weight: 700; }
+.postit-texto {
+  flex: 1; overflow-y: auto; padding: 4px 12px 12px; font-size: 15px; line-height: 1.45; color: #1f2937;
+  scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.2) transparent;
+  word-break: break-word;
+}
+.postit-texto::-webkit-scrollbar { width: 6px; }
+.postit-texto::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 6px; }
+.postit-texto b, .postit-texto strong, .card-nota-texto b, .card-nota-texto strong, .n-texto b, .n-texto strong { font-weight: 800; }
+.postit-texto ul, .card-nota-texto ul { margin: 4px 0; padding-left: 20px; }
+
+/* Destaques */
+.etiqueta-destaque {
+  display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+}
+.etiqueta-destaque.importante { background: #f59e0b; color: #fff; }
+.etiqueta-destaque.urgente { background: #dc2626; color: #fff; }
+.postit.d-importante { outline: 3px solid #f59e0b; outline-offset: 0; }
+.postit.d-urgente { outline: 3px solid #dc2626; outline-offset: 0; animation: pulso-urgente 2.2s ease-in-out infinite; }
+@keyframes pulso-urgente {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45), 0 8px 22px rgba(15,23,42,.16); }
+  50% { box-shadow: 0 0 0 8px rgba(220,38,38,0), 0 8px 22px rgba(15,23,42,.16); }
+}
+@media (prefers-reduced-motion: reduce) { .postit.d-urgente { animation: none; } }
+
+/* Celular: cartões */
+.postit-card .etiqueta-destaque { margin-bottom: 8px; }
+.postit-card.d-importante { box-shadow: inset 0 0 0 3px #f59e0b, 0 6px 16px rgba(15,23,42,.12); }
+.postit-card.d-urgente { box-shadow: inset 0 0 0 3px #dc2626, 0 6px 16px rgba(15,23,42,.12); }
+.card-nota-titulo { font-weight: 800; font-size: 15px; margin-bottom: 4px; color: #111827; }
+.card-nota-texto { white-space: normal; }
+.postit-card { white-space: normal; }
+
+/* Editor da nota (celular) */
+.n-titulo { font-size: 18px; font-weight: 800; margin: 4px 0 10px; }
+.editor-barra { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.btn-b { border: 1.5px solid var(--borda); background: var(--card-2); color: var(--texto); width: 38px; height: 34px; border-radius: 10px; font-size: 16px; }
+.postit .btn-b { width: auto; height: 22px; border: 0; font-size: 12px; border-radius: 6px; background: rgba(255,255,255,.55); color: #1f2937; }
+.editor-dica { font-size: 12px; color: var(--muted); }
+.n-texto {
+  min-height: 170px; max-height: 40dvh; overflow-y: auto; margin-bottom: 16px;
+  padding: 12px 14px; border: 1.5px solid var(--borda); border-radius: 12px;
+  background: var(--card-2); color: var(--texto); font-size: 16px; line-height: 1.45;
+}
+.n-texto:focus { border-color: var(--azul); background: var(--card); }
+.n-texto:empty::before { color: var(--muted); }
+
+/* barra do post-it nunca empurra o conteúdo */
+.postit { min-width: 200px; }
+.postit-barra { position: relative; overflow: hidden; flex-wrap: nowrap; }
+.postit-barra > * { flex-shrink: 0; }
+.postit-etiqueta { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.postit-etiqueta .etiqueta-destaque { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.postit-ferramentas { flex-shrink: 0; }
+.paleta {
+  position: absolute; top: 34px; right: 8px; z-index: 5; display: none; gap: 6px;
+  background: #fff; border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 20px rgba(15,23,42,.2);
+}
+.postit.paleta-aberta .paleta { display: flex; }
+.paleta .bolinha { width: 18px; height: 18px; }
+.postit-ferramentas { display: none; opacity: 1; }
+.postit:hover .postit-ferramentas, .postit:focus-within .postit-ferramentas { display: flex; }
+.postit-etiqueta, .postit-etiqueta:empty { display: block; flex: 1 1 auto; min-width: 0; }
+.postit-ferramentas { margin-left: 0; }
+.postit-x { margin-left: 2px; }

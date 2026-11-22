@@ -121,7 +121,6 @@ function mostrar(session) {
     logado = false;
     tarefas = [];
     notas = [];
-    document.body.classList.remove('quadro-ativo');
     if (canal) { sb.removeChannel(canal); canal = null; }
     $('#tela-app').hidden = true;
     $('#tela-login').hidden = false;
@@ -306,7 +305,7 @@ document.querySelectorAll('.abas button').forEach((b) =>
     $('#lista').hidden = emNotas;
     $('#notas').hidden = !emNotas;
     $('#fab').setAttribute('aria-label', emNotas ? 'Nova nota' : 'Nova tarefa');
-    if (emNotas) carregarNotas(); else document.body.classList.remove('quadro-ativo');
+    if (emNotas) carregarNotas();
     render();
   })
 );
@@ -511,17 +510,55 @@ const CORES_NOTA = {
   amarelo: '#fef08a', azul: '#bfdbfe', verde: '#bbf7d0',
   rosa: '#fbcfe8', laranja: '#fed7aa', roxo: '#ddd6fe',
 };
+const DESTAQUES = { importante: '⭐ Importante', urgente: '🔴 Urgente' };
 let notas = [];
 let notaEditandoId = null;
 let corNotaSel = 'amarelo';
+let destaqueSel = '';
 const ehQuadro = () => window.matchMedia('(min-width: 900px)').matches;
 const corDe = (n) => CORES_NOTA[n.cor] || CORES_NOTA.amarelo;
 const maxZ = () => notas.reduce((m, n) => Math.max(m, n.z || 0), 0);
+
+// Texto com negrito: só deixa passar formatação simples (segurança)
+const TAGS_OK = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'UL', 'OL', 'LI', 'SPAN']);
+function limparHtml(html) {
+  const doc = new DOMParser().parseFromString(`<div>${html || ''}</div>`, 'text/html');
+  const limpar = (no) => {
+    [...no.childNodes].forEach((f) => {
+      if (f.nodeType === 3) return;
+      if (f.nodeType !== 1 || !TAGS_OK.has(f.tagName)) {
+        if (f.nodeType === 1) { limpar(f); f.replaceWith(...f.childNodes); } else f.remove();
+        return;
+      }
+      const negrito = f.tagName === 'SPAN' && /font-weight:\s*(bold|[6-9]00)/i.test(f.getAttribute('style') || '');
+      [...f.attributes].forEach((a) => f.removeAttribute(a.name));
+      limpar(f);
+      if (f.tagName === 'SPAN') {
+        if (negrito) { const b = doc.createElement('b'); b.append(...f.childNodes); f.replaceWith(b); }
+        else f.replaceWith(...f.childNodes);
+      }
+    });
+  };
+  const raiz = doc.body.firstChild;
+  limpar(raiz);
+  return raiz.innerHTML;
+}
+// notas antigas eram texto puro
+const htmlDaNota = (n) => {
+  const t = n.texto || '';
+  return /<[a-z][\s\S]*>/i.test(t) ? limparHtml(t) : esc(t).replace(/\n/g, '<br>');
+};
+const textoPuro = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent.trim(); };
 
 async function carregarNotas() {
   const { data, error } = await sb.from('notas').select('*').order('z', { ascending: true });
   if (error) { toast('Erro nas notas: ' + error.message); return; }
   notas = data;
+  // não perde o que ainda está sendo digitado
+  for (const [id, p] of Object.entries(pendentes)) {
+    const n = notas.find((x) => x.id === id);
+    if (n) Object.assign(n, p.campos);
+  }
   renderNotas();
 }
 
@@ -538,12 +575,39 @@ async function salvarNota(id, campos) {
   if (error) toast('Nota não salvou: ' + error.message);
 }
 
+// guarda a mudança na hora (na tela) e envia pro banco um instante depois
+const pendentes = {};
+function salvarNotaDepois(id, campos, ms = 600) {
+  const n = notas.find((x) => x.id === id);
+  if (n) Object.assign(n, campos);
+  const p = (pendentes[id] ||= { campos: {} });
+  Object.assign(p.campos, campos);
+  clearTimeout(p.t);
+  p.t = setTimeout(() => enviarPendentes(id), ms);
+}
+function enviarPendentes(id) {
+  const p = pendentes[id];
+  if (!p) return;
+  clearTimeout(p.t);
+  delete pendentes[id];
+  salvarNota(id, p.campos);
+}
+window.addEventListener('pagehide', () => Object.keys(pendentes).forEach(enviarPendentes));
+
 async function excluirNota(id) {
   const { error } = await sb.from('notas').delete().eq('id', id);
   if (error) { toast('Não excluiu: ' + error.message); return false; }
   notas = notas.filter((n) => n.id !== id);
   renderNotas();
   return true;
+}
+
+async function pedirExclusaoNota(id) {
+  const n = notas.find((x) => x.id === id);
+  const nome = n && (n.titulo || textoPuro(htmlDaNota(n)).slice(0, 40));
+  const ok = await confirmar(nome ? `Excluir a nota "${nome}"?` : 'Excluir esta nota?', 'Excluir', true);
+  if (ok && (await excluirNota(id))) toast('Nota excluída');
+  return ok;
 }
 
 function ajustarAlturaQuadro() {
@@ -556,24 +620,32 @@ function renderNotas() {
   if (aba !== 'notas') return;
   const c = $('#notas');
   const modo = ehQuadro() ? 'quadro' : 'grade';
-  document.body.classList.toggle('quadro-ativo', modo === 'quadro');
   if (c.dataset.modo !== modo) {
     c.dataset.modo = modo;
     c.style.height = '';
     c.innerHTML = modo === 'quadro'
-      ? '<div class="quadro-area" id="quadro-area"></div><p class="dica-quadro" id="dica-quadro">Arraste pela barra de cima · puxe o canto para aumentar</p>'
+      ? '<div class="quadro-area" id="quadro-area"></div><p class="dica-quadro" id="dica-quadro"></p>'
       : '<div class="grade" id="grade"></div>';
   }
-  if (modo === 'quadro') { renderQuadro(); ajustarAlturaQuadro(); }
+  if (modo === 'quadro') { ajustarAlturaQuadro(); renderQuadro(); }
   else renderGrade();
 }
 
+const etiquetaDestaque = (n) => n.destaque ? `<span class="etiqueta-destaque ${n.destaque}">${DESTAQUES[n.destaque]}</span>` : '';
+
 /* --- celular: grade --- */
 function renderGrade() {
-  const lista = [...notas].sort((a, b) => (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
+  const peso = (n) => (n.destaque === 'urgente' ? 0 : n.destaque === 'importante' ? 1 : 2);
+  const lista = [...notas].sort((a, b) => peso(a) - peso(b) || (b.atualizado_em || '').localeCompare(a.atualizado_em || ''));
   $('#grade').innerHTML = lista.length
-    ? lista.map((n) => `<div class="postit-card" role="button" tabindex="0" data-id="${n.id}" style="background:${corDe(n)}">${
-        n.texto ? esc(n.texto) : '<span class="nota-vazia">Nota vazia</span>'}</div>`).join('')
+    ? lista.map((n) => {
+        const corpo = htmlDaNota(n);
+        return `<div class="postit-card ${n.destaque ? 'd-' + n.destaque : ''}" role="button" tabindex="0" data-id="${n.id}" style="background:${corDe(n)}">
+          ${etiquetaDestaque(n)}
+          ${n.titulo ? `<div class="card-nota-titulo">${esc(n.titulo)}</div>` : ''}
+          <div class="card-nota-texto">${corpo || (n.titulo ? '' : '<span class="nota-vazia">Nota vazia</span>')}</div>
+        </div>`;
+      }).join('')
     : `<div class="vazio"><strong>Nenhuma nota ainda</strong>Toque no + para criar um post-it.</div>`;
 }
 
@@ -588,43 +660,57 @@ function setCorNota(c) {
   corNotaSel = c;
   document.querySelectorAll('#n-cores button').forEach((b) => b.classList.toggle('sel', b.dataset.cor === c));
 }
+function setDestaque(d) {
+  destaqueSel = d || '';
+  document.querySelectorAll('#n-destaque button').forEach((b) => b.classList.toggle('sel', b.dataset.destaque === destaqueSel));
+}
 $('#n-cores').innerHTML = Object.entries(CORES_NOTA)
   .map(([k, v]) => `<button type="button" class="cor-bolha" data-cor="${k}" style="background:${v}" aria-label="${k}"></button>`).join('');
 document.querySelectorAll('#n-cores button').forEach((b) => b.addEventListener('click', () => setCorNota(b.dataset.cor)));
+document.querySelectorAll('#n-destaque button').forEach((b) => b.addEventListener('click', () => setDestaque(b.dataset.destaque)));
+
+// botão B (negrito) — não tira o foco do texto
+document.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('[data-cmd="bold"]');
+  if (!b) return;
+  e.preventDefault();
+  document.execCommand('bold');
+});
 
 function abrirNota(n) {
   notaEditandoId = n.id;
-  $('#n-texto').value = n.texto || '';
+  $('#n-titulo').value = n.titulo || '';
+  $('#n-texto').innerHTML = htmlDaNota(n);
   setCorNota(n.cor || 'amarelo');
+  setDestaque(n.destaque);
   $('#dlg-nota').showModal();
 }
 $('#form-nota').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = notaEditandoId;
   $('#dlg-nota').close();
-  await salvarNota(id, { texto: $('#n-texto').value, cor: corNotaSel });
+  await salvarNota(id, {
+    titulo: $('#n-titulo').value.trim(),
+    texto: limparHtml($('#n-texto').innerHTML),
+    cor: corNotaSel,
+    destaque: destaqueSel || null,
+  });
   renderNotas();
 });
 $('#btn-nota-fechar').addEventListener('click', () => $('#dlg-nota').close());
 $('#btn-nota-excluir').addEventListener('click', async () => {
-  if (!(await confirmar('Excluir esta nota?', 'Excluir', true))) return;
   $('#dlg-nota').close();
-  if (await excluirNota(notaEditandoId)) toast('Nota excluída');
+  const excluiu = await pedirExclusaoNota(notaEditandoId);
+  if (!excluiu) $('#dlg-nota').showModal();
 });
 
 /* --- computador: quadro --- */
-const observadorTamanho = new ResizeObserver((entradas) => {
-  for (const ent of entradas) {
-    const el = ent.target;
-    const n = notas.find((x) => x.id === el.dataset.id);
-    if (!n || el.classList.contains('arrastando')) continue;
-    const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
-    if (Math.abs(w - n.largura) > 2 || Math.abs(h - n.altura) > 2) {
-      clearTimeout(el._tTam);
-      el._tTam = setTimeout(() => salvarNota(n.id, { largura: w, altura: h }), 500);
-    }
-  }
-});
+function aplicarDestaque(el, n) {
+  el.classList.toggle('d-importante', n.destaque === 'importante');
+  el.classList.toggle('d-urgente', n.destaque === 'urgente');
+  el.querySelector('.postit-etiqueta').innerHTML = etiquetaDestaque(n);
+  el.querySelectorAll('[data-destaque]').forEach((b) => b.classList.toggle('ativo', b.dataset.destaque === n.destaque));
+}
 
 function criarPostit(n) {
   const el = document.createElement('div');
@@ -633,36 +719,65 @@ function criarPostit(n) {
   el.innerHTML = `
     <div class="postit-barra">
       <span class="pega">⠿</span>
-      <div class="postit-cores">${Object.entries(CORES_NOTA)
-        .map(([k, v]) => `<button type="button" data-cor="${k}" style="background:${v}" aria-label="${k}"></button>`).join('')}</div>
+      <span class="postit-etiqueta"></span>
+      <div class="postit-ferramentas">
+        <button type="button" class="ferr btn-b" data-cmd="bold" aria-label="Negrito"><b>B</b></button>
+        <button type="button" class="ferr" data-destaque="importante" aria-label="Importante">⭐</button>
+        <button type="button" class="ferr" data-destaque="urgente" aria-label="Urgente">🔴</button>
+        <button type="button" class="ferr btn-paleta" aria-label="Cor">🎨</button>
+      </div>
+      <div class="paleta">${Object.entries(CORES_NOTA).map(([k, v]) => `<button type="button" class="bolinha" data-cor="${k}" style="background:${v}" aria-label="${k}"></button>`).join('')}</div>
       <button type="button" class="postit-x" aria-label="Excluir nota">✕</button>
     </div>
-    <textarea placeholder="Escreva aqui..."></textarea>`;
+    <input class="postit-titulo" placeholder="Título" autocomplete="off">
+    <div class="postit-texto" contenteditable="true" data-placeholder="Escreva aqui..."></div>`;
 
-  const ta = el.querySelector('textarea');
-  ta.addEventListener('input', () => {
-    clearTimeout(el._tTxt);
-    el._tTxt = setTimeout(() => salvarNota(n.id, { texto: ta.value }), 600);
-  });
-  ta.addEventListener('blur', () => {
-    clearTimeout(el._tTxt);
-    const atual = notas.find((x) => x.id === n.id);
-    if (atual && atual.texto !== ta.value) salvarNota(n.id, { texto: ta.value });
+  const titulo = el.querySelector('.postit-titulo');
+  const texto = el.querySelector('.postit-texto');
+  const atual = () => notas.find((x) => x.id === n.id);
+
+  titulo.addEventListener('input', () => salvarNotaDepois(n.id, { titulo: titulo.value.trim() }));
+  titulo.addEventListener('blur', () => enviarPendentes(n.id));
+  titulo.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); texto.focus(); } });
+  texto.addEventListener('input', () => salvarNotaDepois(n.id, { texto: limparHtml(texto.innerHTML) }, 700));
+  texto.addEventListener('blur', () => enviarPendentes(n.id));
+  texto.addEventListener('paste', (e) => {           // cola só o texto, sem formatação estranha
+    e.preventDefault();
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
   });
 
-  el.querySelectorAll('.postit-cores button').forEach((b) =>
-    b.addEventListener('click', () => { el.style.background = CORES_NOTA[b.dataset.cor]; salvarNota(n.id, { cor: b.dataset.cor }); })
+  el.querySelector('.btn-paleta').addEventListener('click', () => el.classList.toggle('paleta-aberta'));
+  el.addEventListener('mouseleave', () => el.classList.remove('paleta-aberta'));
+  el.querySelectorAll('.bolinha').forEach((b) =>
+    b.addEventListener('click', () => {
+      el.style.background = CORES_NOTA[b.dataset.cor];
+      el.classList.remove('paleta-aberta');
+      salvarNota(n.id, { cor: b.dataset.cor });
+    })
   );
-  el.querySelector('.postit-x').addEventListener('click', async () => {
-    if (ta.value.trim() && !(await confirmar('Excluir esta nota?', 'Excluir', true))) return;
-    await excluirNota(n.id);
-  });
+  el.querySelectorAll('[data-destaque]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const a = atual();
+      const novo = a && a.destaque === b.dataset.destaque ? null : b.dataset.destaque;
+      salvarNota(n.id, { destaque: novo });
+      aplicarDestaque(el, { ...a, destaque: novo });
+    })
+  );
+  el.querySelector('.postit-x').addEventListener('click', () => pedirExclusaoNota(n.id));
 
-  // trazer pra frente ao clicar
+  // clicar traz pra frente; e o tamanho só é salvo quando VOCÊ redimensiona
   el.addEventListener('pointerdown', () => {
-    const atual = notas.find((x) => x.id === n.id);
+    const a = atual();
     const topo = maxZ();
-    if (atual && atual.z < topo) { el.style.zIndex = topo + 1; salvarNota(n.id, { z: topo + 1 }); }
+    if (a && a.z < topo) { el.style.zIndex = topo + 1; salvarNota(n.id, { z: topo + 1 }); }
+    const w0 = el.offsetWidth, h0 = el.offsetHeight;
+    window.addEventListener('pointerup', () => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (w > 0 && h > 0 && (Math.abs(w - w0) > 2 || Math.abs(h - h0) > 2)) {
+        salvarNota(n.id, { largura: Math.round(w), altura: Math.round(h) });
+        ajustarTamanhoArea();
+      }
+    }, { once: true });
   });
 
   // arrastar pela barra
@@ -683,7 +798,9 @@ function criarPostit(n) {
       barra.removeEventListener('pointerup', soltar);
       barra.removeEventListener('pointercancel', soltar);
       el.classList.remove('arrastando');
-      salvarNota(n.id, { x: Math.round(el.offsetLeft), y: Math.round(el.offsetTop) });
+      const x = Math.round(el.offsetLeft), y = Math.round(el.offsetTop);
+      const a = atual();
+      if (a && (a.x !== x || a.y !== y)) salvarNota(n.id, { x, y });
       ajustarTamanhoArea();
     };
     barra.addEventListener('pointermove', mover);
@@ -691,7 +808,6 @@ function criarPostit(n) {
     barra.addEventListener('pointercancel', soltar);
   });
 
-  observadorTamanho.observe(el);
   return el;
 }
 
@@ -699,10 +815,10 @@ function ajustarTamanhoArea() {
   const area = $('#quadro-area');
   if (!area) return;
   let maxX = 0, maxY = 0;
-  area.querySelectorAll('.postit').forEach((el) => {
-    maxX = Math.max(maxX, el.offsetLeft + el.offsetWidth);
-    maxY = Math.max(maxY, el.offsetTop + el.offsetHeight);
-  });
+  for (const n of notas) {
+    maxX = Math.max(maxX, n.x + n.largura);
+    maxY = Math.max(maxY, n.y + n.altura);
+  }
   area.style.width = maxX + 400 + 'px';
   area.style.height = maxY + 300 + 'px';
 }
@@ -710,24 +826,29 @@ function ajustarTamanhoArea() {
 function renderQuadro() {
   const area = $('#quadro-area');
   const ids = new Set(notas.map((n) => n.id));
-  area.querySelectorAll('.postit').forEach((el) => {
-    if (!ids.has(el.dataset.id)) { observadorTamanho.unobserve(el); el.remove(); }
-  });
+  area.querySelectorAll('.postit').forEach((el) => { if (!ids.has(el.dataset.id)) el.remove(); });
   for (const n of notas) {
     let el = area.querySelector(`.postit[data-id="${n.id}"]`);
     if (!el) { el = criarPostit(n); area.appendChild(el); }
     if (el.classList.contains('arrastando')) continue;
+    // posição e tamanho vêm SEMPRE do que está salvo
     el.style.left = n.x + 'px';
     el.style.top = n.y + 'px';
-    if (Math.abs(el.offsetWidth - n.largura) > 2) el.style.width = n.largura + 'px';
-    if (Math.abs(el.offsetHeight - n.altura) > 2) el.style.height = n.altura + 'px';
+    el.style.width = Math.max(160, n.largura) + 'px';
+    el.style.height = Math.max(120, n.altura) + 'px';
     el.style.zIndex = n.z;
     el.style.background = corDe(n);
-    const ta = el.querySelector('textarea');
-    if (document.activeElement !== ta && ta.value !== (n.texto || '')) ta.value = n.texto || '';
+    aplicarDestaque(el, n);
+    const editando = el.contains(document.activeElement);
+    if (!editando) {
+      el.querySelector('.postit-titulo').value = n.titulo || '';
+      const html = htmlDaNota(n);
+      const tx = el.querySelector('.postit-texto');
+      if (tx.innerHTML !== html) tx.innerHTML = html;
+    }
   }
   $('#dica-quadro').textContent = notas.length
-    ? 'Arraste pela barra de cima · puxe o canto de baixo para aumentar'
+    ? 'Arraste pela barra de cima · puxe o canto de baixo para aumentar · Ctrl+B para negrito'
     : 'Quadro vazio — clique no + para colar o primeiro post-it';
   ajustarTamanhoArea();
 }
@@ -750,26 +871,22 @@ function espacoLivre(c) {
 
 async function novaNota() {
   const quadro = ehQuadro();
-  const c = $('#notas');
   let x = 40, y = 40;
-  if (quadro) [x, y] = espacoLivre(c);
+  if (quadro) [x, y] = espacoLivre($('#notas'));
   const { data, error } = await sb.from('notas')
-    .insert({ texto: '', cor: 'amarelo', x, y, z: maxZ() + 1 }).select().single();
+    .insert({ titulo: '', texto: '', cor: 'amarelo', x, y, z: maxZ() + 1 }).select().single();
   if (error) { toast('Não criou a nota: ' + error.message); return; }
   notas.push(data);
   renderNotas();
   if (quadro) {
-    const ta = document.querySelector(`.postit[data-id="${data.id}"] textarea`);
-    if (ta) ta.focus();
+    const t = document.querySelector(`.postit[data-id="${data.id}"] .postit-titulo`);
+    if (t) t.focus();
   } else {
     abrirNota(data);
   }
 }
 
-window.addEventListener('resize', () => {
-  if (aba !== 'notas') return;
-  renderNotas();
-});
+window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
