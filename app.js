@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=19';
+import { interpretarFala } from './voz.js?v=20';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -1067,8 +1067,18 @@ function renderNotas() {
     c.dataset.modo = modo;
     c.style.height = '';
     c.innerHTML = modo === 'quadro'
-      ? '<div class="quadro-area" id="quadro-area"></div><p class="dica-quadro" id="dica-quadro"></p>'
+      ? `<div class="quadro-scroll" id="quadro-scroll">
+           <div class="quadro-sizer" id="quadro-sizer"><div class="quadro-area" id="quadro-area"></div></div>
+         </div>
+         <div class="zoom-ctrl">
+           <button type="button" data-zoom="-" aria-label="Diminuir zoom">−</button>
+           <button type="button" data-zoom="100" id="zoom-valor" aria-label="Voltar para 100%">100%</button>
+           <button type="button" data-zoom="+" aria-label="Aumentar zoom">+</button>
+           <button type="button" data-zoom="tudo" class="zoom-tudo">Ver tudo</button>
+         </div>
+         <p class="dica-quadro" id="dica-quadro"></p>`
       : '<div class="grade" id="grade"></div>';
+    if (modo === 'quadro') prepararZoom();
   }
   if (modo === 'quadro') { ajustarAlturaQuadro(); renderQuadro(); }
   else renderGrade();
@@ -1251,8 +1261,8 @@ function criarPostit(n) {
     el.classList.add('arrastando');
     barra.setPointerCapture(e.pointerId);
     const mover = (ev) => {
-      el.style.left = Math.max(0, origX + ev.clientX - inicioX) + 'px';
-      el.style.top = Math.max(0, origY + ev.clientY - inicioY) + 'px';
+      el.style.left = Math.max(0, origX + (ev.clientX - inicioX) / zoomQuadro) + 'px';
+      el.style.top = Math.max(0, origY + (ev.clientY - inicioY) / zoomQuadro) + 'px';
     };
     const soltar = () => {
       barra.removeEventListener('pointermove', mover);
@@ -1280,9 +1290,78 @@ function ajustarTamanhoArea() {
     maxX = Math.max(maxX, n.x + n.largura);
     maxY = Math.max(maxY, n.y + n.altura);
   }
-  area.style.width = maxX + 400 + 'px';
-  area.style.height = maxY + 300 + 'px';
+  const sc = $('#quadro-scroll');
+  const W = Math.max(maxX + 400, sc ? sc.clientWidth / zoomQuadro : 0);
+  const H = Math.max(maxY + 300, sc ? sc.clientHeight / zoomQuadro : 0);
+  area.style.width = W + 'px';
+  area.style.height = H + 'px';
+  area.style.transform = `scale(${zoomQuadro})`;
+  const sizer = $('#quadro-sizer');
+  if (sizer) { sizer.style.width = W * zoomQuadro + 'px'; sizer.style.height = H * zoomQuadro + 'px'; }
+  const v = $('#zoom-valor');
+  if (v) v.textContent = Math.round(zoomQuadro * 100) + '%';
 }
+
+/* --- zoom do quadro (Ctrl + rolar, Ctrl +/−/0, botões) --- */
+let zoomQuadro = (() => { try { return Number(localStorage.getItem('agenda-zoom')) || 1; } catch { return 1; } })();
+function aplicarZoom(novo, ancoraX, ancoraY) {
+  const sc = $('#quadro-scroll');
+  if (!sc) return;
+  novo = Math.min(2, Math.max(0.25, Math.round(novo * 100) / 100));
+  const ax = ancoraX ?? sc.clientWidth / 2;
+  const ay = ancoraY ?? sc.clientHeight / 2;
+  const cx = (sc.scrollLeft + ax) / zoomQuadro;   // ponto do quadro embaixo do mouse
+  const cy = (sc.scrollTop + ay) / zoomQuadro;
+  zoomQuadro = novo;
+  try { localStorage.setItem('agenda-zoom', String(novo)); } catch { /* ok */ }
+  ajustarTamanhoArea();
+  sc.scrollLeft = cx * novo - ax;                  // mantém esse ponto embaixo do mouse
+  sc.scrollTop = cy * novo - ay;
+}
+function verTudo() {
+  const sc = $('#quadro-scroll');
+  if (!sc || !notas.length) { aplicarZoom(1); return; }
+  const maxX = Math.max(...notas.map((n) => n.x + n.largura)) + 40;
+  const maxY = Math.max(...notas.map((n) => n.y + n.altura)) + 40;
+  const z = Math.min(1, sc.clientWidth / maxX, sc.clientHeight / maxY);
+  aplicarZoom(z, 0, 0);
+  sc.scrollLeft = 0; sc.scrollTop = 0;
+}
+function prepararZoom() {
+  const sc = $('#quadro-scroll');
+  sc.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;                         // rolar normal continua rolando
+    e.preventDefault();                             // Ctrl+rolar: zoom só no quadro
+    const r = sc.getBoundingClientRect();
+    aplicarZoom(zoomQuadro * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  $('#notas').querySelector('.zoom-ctrl').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-zoom]');
+    if (!b) return;
+    const z = b.dataset.zoom;
+    if (z === '+') aplicarZoom(zoomQuadro * 1.2);
+    else if (z === '-') aplicarZoom(zoomQuadro / 1.2);
+    else if (z === '100') aplicarZoom(1);
+    else verTudo();
+  });
+  // arrastar o fundo vazio move a visão
+  sc.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !(e.target === sc || e.target.id === 'quadro-area' || e.target.id === 'quadro-sizer')) return;
+    const x0 = e.clientX, y0 = e.clientY, sl = sc.scrollLeft, st = sc.scrollTop;
+    sc.classList.add('movendo');
+    sc.setPointerCapture(e.pointerId);
+    const mover = (ev) => { sc.scrollLeft = sl - (ev.clientX - x0); sc.scrollTop = st - (ev.clientY - y0); };
+    const soltar = () => { sc.classList.remove('movendo'); sc.removeEventListener('pointermove', mover); sc.removeEventListener('pointerup', soltar); };
+    sc.addEventListener('pointermove', mover);
+    sc.addEventListener('pointerup', soltar);
+  });
+}
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || aba !== 'notas' || $('#notas').dataset.modo !== 'quadro') return;
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); aplicarZoom(zoomQuadro * 1.2); }
+  else if (e.key === '-') { e.preventDefault(); aplicarZoom(zoomQuadro / 1.2); }
+  else if (e.key === '0') { e.preventDefault(); aplicarZoom(1); }
+});
 
 function renderQuadro() {
   const area = $('#quadro-area');
@@ -1309,7 +1388,7 @@ function renderQuadro() {
     }
   }
   $('#dica-quadro').textContent = notas.length
-    ? 'Arraste pela barra de cima · puxe o canto de baixo para aumentar · Ctrl+B para negrito'
+    ? 'Ctrl + rolar = zoom · arraste o fundo para mover · Ctrl+B = negrito'
     : 'Quadro vazio — clique no + para colar o primeiro post-it';
   ajustarTamanhoArea();
 }
@@ -1317,8 +1396,8 @@ function renderQuadro() {
 // procura um lugar vazio na parte visível do quadro (lado a lado, sem empilhar)
 function espacoLivre(c) {
   const L = 230, A = 210, gap = 24;
-  const x0 = c.scrollLeft + gap, y0 = c.scrollTop + gap;
-  const colunas = Math.max(1, Math.floor((c.clientWidth - gap) / (L + gap)));
+  const x0 = c.scrollLeft / zoomQuadro + gap, y0 = c.scrollTop / zoomQuadro + gap;
+  const colunas = Math.max(1, Math.floor((c.clientWidth / zoomQuadro - gap) / (L + gap)));
   const sobrepoe = (x, y) => notas.some((n) =>
     x < n.x + n.largura + 8 && x + L + 8 > n.x && y < n.y + n.altura + 8 && y + A + 8 > n.y);
   for (let linha = 0; linha < 30; linha++) {
@@ -1333,7 +1412,7 @@ function espacoLivre(c) {
 async function novaNota() {
   const quadro = ehQuadro();
   let x = 40, y = 40;
-  if (quadro) [x, y] = espacoLivre($('#notas'));
+  if (quadro) [x, y] = espacoLivre($('#quadro-scroll'));
   const { data, error } = await sb.from('notas')
     .insert({ titulo: '', texto: '', cor: 'amarelo', x, y, z: maxZ() + 1 }).select().single();
   if (error) { toast('Não criou a nota: ' + error.message); return; }
@@ -1350,7 +1429,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 19;
+const VERSAO_APP = 20;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {

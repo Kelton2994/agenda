@@ -549,3 +549,24 @@ html.escuro .n-texto a { color: #93c5fd; }
   .lista > .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: stretch; }
   .lista > .cards .card { margin-bottom: 0; }
 }
+
+/* ===== v20: zoom do quadro ===== */
+.notas[data-modo="quadro"] { overflow: hidden; position: relative; background-image: none; }
+.quadro-scroll { position: absolute; inset: 0; overflow: auto; }
+.quadro-scroll.movendo { cursor: grabbing; }
+.quadro-sizer { position: relative; }
+.quadro-area {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0; min-width: 0; min-height: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--muted) 35%, transparent) 1.2px, transparent 1.3px);
+  background-size: 24px 24px; cursor: grab;
+}
+.quadro-area .postit { cursor: default; }
+.dica-quadro { position: absolute; left: 14px; bottom: 12px; }
+.zoom-ctrl {
+  position: absolute; top: 12px; right: 14px; z-index: 30; display: flex; align-items: center; gap: 2px;
+  background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 4px; box-shadow: var(--sombra);
+}
+.zoom-ctrl button { border: 0; background: transparent; color: var(--texto); font-weight: 700; min-width: 32px; height: 30px; border-radius: 8px; font-size: 15px; padding: 0 8px; }
+.zoom-ctrl button:hover { background: var(--card-2); }
+#zoom-valor { font-size: 13px; min-width: 52px; }
+.zoom-tudo { font-size: 13px !important; color: var(--azul) !important; border-left: 1px solid var(--borda) !important; border-radius: 0 8px 8px 0 !important; }
