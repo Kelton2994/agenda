@@ -1,4 +1,4 @@
-import { createClient } from './vendor/supabase.js';
+import { createClient } from './supabase.js';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
 import { interpretarFala } from './voz.js?v=24';
 
