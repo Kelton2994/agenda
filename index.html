@@ -20,7 +20,7 @@
       if (t === 'escuro' || (t === 'auto' && (h >= 18 || h < 7))) document.documentElement.classList.add('escuro');
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=22">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -156,6 +156,11 @@
           <button type="button" data-lembrar="amanha-0630">Amanhã 06:30</button>
           <button type="button" data-lembrar="">Sem lembrete</button>
         </div>
+        <p class="rotulo-aviso" id="rotulo-aviso">Como avisar</p>
+        <div class="chips" id="chips-aviso">
+          <button type="button" data-aviso="alarme">⏰ Alarme <small>(toca até eu responder)</small></button>
+          <button type="button" data-aviso="notificacao">🔔 Só notificação</button>
+        </div>
       </div>
 
 
@@ -237,6 +242,11 @@
       </div>
       <p class="menu-titulo">Lembretes neste aparelho</p>
       <div id="menu-notif" class="menu-notif"></div>
+      <div id="menu-nativo" hidden>
+        <button type="button" id="menu-som" class="menu-item">🎵 Som do alarme: <b id="nome-som">…</b></button>
+        <button type="button" id="menu-som-notif" class="menu-item">🔔 Som da notificação</button>
+        <button type="button" id="menu-atualizar" class="menu-item">⬇️ Procurar atualização <small id="versao-nativa"></small></button>
+      </div>
       <button type="button" id="menu-sair" class="menu-item perigo-txt">Sair da conta</button>
       <button type="button" id="menu-fechar" class="menu-item">Fechar</button>
     </div>
@@ -268,6 +278,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script type="module" src="app.js?v=20"></script>
+  <script type="module" src="app.js?v=22"></script>
 </body>
 </html>

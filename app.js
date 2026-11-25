@@ -1,8 +1,11 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { createClient } from './vendor/supabase.js';
 import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLICA } from './config.js';
-import { interpretarFala } from './voz.js?v=20';
+import { interpretarFala } from './voz.js?v=22';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Ponte com o app Android (só existe dentro do .apk)
+const NATIVO = window.AgendaNativa || null;
+if (NATIVO) document.documentElement.classList.add('nativo');
 const $ = (s) => document.querySelector(s);
 
 const STATUS = {
@@ -159,7 +162,7 @@ $('#btn-criar-conta').addEventListener('click', async () => {
 function marcarTema() {
   document.querySelectorAll('#chips-tema button').forEach((b) => b.classList.toggle('sel', b.dataset.tema === temaEscolhido()));
 }
-$('#btn-menu').addEventListener('click', () => { marcarTema(); mostrarStatusNotif(); $('#dlg-menu').showModal(); });
+$('#btn-menu').addEventListener('click', () => { marcarTema(); mostrarStatusNotif(); mostrarMenuNativo(); $('#dlg-menu').showModal(); });
 $('#menu-fechar').addEventListener('click', () => $('#dlg-menu').close());
 $('#dlg-menu').addEventListener('click', (e) => { if (e.target === $('#dlg-menu')) $('#dlg-menu').close(); });
 document.querySelectorAll('#chips-tema button').forEach((b) => b.addEventListener('click', () => {
@@ -176,14 +179,18 @@ function mostrar(session) {
     logado = true;
     $('#tela-login').hidden = true;
     $('#tela-app').hidden = false;
+    mostrarCache();
     carregar();
     assinar();
-    ativarNotificacoes(false);
+    if (NATIVO) registrarAparelhoNativo();
+    else ativarNotificacoes(false);
   } else if (!session) {
     logado = false;
     tarefas = [];
     notas = [];
     if (canal) { sb.removeChannel(canal); canal = null; }
+    try { localStorage.removeItem(CACHE_TAREFAS); } catch { /* ok */ }
+    if (NATIVO) NATIVO.sair();
     $('#tela-app').hidden = true;
     $('#tela-login').hidden = false;
   }
@@ -203,6 +210,82 @@ async function carregar() {
   tarefas = [...abertas.data, ...feitas.data];
   render();
   verificarLembretes();
+  try { localStorage.setItem(CACHE_TAREFAS, JSON.stringify(tarefas)); } catch { /* cheio */ }
+  sincronizarNativo();
+}
+
+// Abre na hora com a última lista salva; a lista nova chega logo depois
+const CACHE_TAREFAS = 'agenda-cache-tarefas';
+function mostrarCache() {
+  try {
+    const salvas = JSON.parse(localStorage.getItem(CACHE_TAREFAS) || 'null');
+    if (Array.isArray(salvas) && salvas.length) { tarefas = salvas; render(); }
+  } catch { /* ignora */ }
+}
+
+/* ---------- como avisar: alarme ou só notificação ---------- */
+let avisoSel = 'alarme';
+function setAviso(v) {
+  avisoSel = v === 'notificacao' ? 'notificacao' : 'alarme';
+  document.querySelectorAll('#chips-aviso button').forEach((b) => b.classList.toggle('sel', b.dataset.aviso === avisoSel));
+  mostrarAviso();
+}
+// só faz sentido perguntar quando tem lembrete
+function mostrarAviso() {
+  const tem = !!$('#f-lembrar').value;
+  $('#chips-aviso').hidden = !tem;
+  $('#rotulo-aviso').hidden = !tem;
+}
+document.querySelectorAll('#chips-aviso button').forEach((b) => b.addEventListener('click', () => setAviso(b.dataset.aviso)));
+$('#f-lembrar').addEventListener('input', mostrarAviso);
+$('#chips-lembrar').addEventListener('click', () => setTimeout(mostrarAviso, 0));
+
+/* ---------- configurações do app Android ---------- */
+function mostrarMenuNativo() {
+  if (!NATIVO) return;
+  $('#menu-nativo').hidden = false;
+  try { $('#nome-som').textContent = NATIVO.nomeSom(); } catch { /* ok */ }
+  try { $('#versao-nativa').textContent = '(versão ' + NATIVO.versao() + ')'; } catch { /* ok */ }
+}
+window.somNativo = (nome) => { $('#nome-som').textContent = nome; toast('Som do alarme: ' + nome); };
+if (NATIVO) {
+  $('#menu-som').addEventListener('click', () => NATIVO.escolherSom());
+  $('#menu-som-notif').addEventListener('click', () => NATIVO.somNotificacao());
+  $('#menu-atualizar').addEventListener('click', () => { $('#dlg-menu').close(); NATIVO.verificarAtualizacao(); });
+}
+
+/* ---------- alarmes do Android ---------- */
+// Manda para o celular a lista de lembretes; o Android agenda os alarmes de verdade
+function sincronizarNativo() {
+  if (!NATIVO) return;
+  const lista = tarefas
+    .filter((t) => t.status !== 'concluido' && t.lembrar_em && !String(t.id).startsWith('tmp-'))
+    .map((t) => ({
+      id: t.id,
+      titulo: t.titulo,
+      quem: t.quem_pediu || '',
+      quando: new Date(t.lembrar_em).getTime(),
+      recorrente: !!t.recorrencia,
+      avisos: t.avisos_enviados ?? 0,
+      tipo: t.tipo_aviso || 'alarme',
+    }));
+  try { NATIVO.agendar(JSON.stringify(lista)); } catch (e) { console.error(e); }
+}
+
+// Cada celular ganha um código secreto; com ele o Android busca as tarefas e responde aos botões do alarme
+async function registrarAparelhoNativo() {
+  let codigo = null;
+  try { codigo = localStorage.getItem('agenda-aparelho'); } catch { /* ok */ }
+  if (!codigo) {
+    codigo = 'nativo:' + crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+    const { error } = await sb.from('push_inscricoes').upsert(
+      { endpoint: codigo, p256dh: '-', auth: '-', aparelho: 'App Android' },
+      { onConflict: 'endpoint' }
+    );
+    if (error) { toast('Alarmes: não consegui registrar o celular (' + error.message + ')'); return; }
+    try { localStorage.setItem('agenda-aparelho', codigo); } catch { /* ok */ }
+  }
+  NATIVO.configurar(JSON.stringify({ url: SUPABASE_URL + '/functions/v1/lembretes', aparelho: codigo }));
 }
 
 let tRecarga;
@@ -575,6 +658,7 @@ function abrirTarefa(t = null) {
   $('#f-titulo').value = t?.titulo ?? '';
   $('#f-quem').value = t?.quem_pediu ?? '';
   $('#f-lembrar').value = paraInputLocal(t?.lembrar_em);
+  setAviso(t?.tipo_aviso || 'alarme');
   $('#f-notas').value = t?.notas ?? '';
   $('#f-status').value = t?.status ?? 'a_fazer';
   $('#f-prazo').value = '';
@@ -606,7 +690,7 @@ $('#form-tarefa').addEventListener('submit', async (e) => {
     prazo: valorPrazo(),
     quem_pediu: $('#f-quem').value.trim() || null,
     lembrar_em: $('#f-lembrar').value ? new Date($('#f-lembrar').value).toISOString() : null,
-    tipo_aviso: 'alarme',
+    tipo_aviso: avisoSel,
   };
 
   if (repSel) {
@@ -668,7 +752,14 @@ $('#btn-excluir').addEventListener('click', async () => {
 /* ---------- criar tarefa falando ---------- */
 const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
 let ouvindo = null;
-if (!Reconhecimento) { $('#btn-voz').hidden = true; $('#fab-voz').hidden = true; }
+if (!Reconhecimento && !NATIVO) { $('#btn-voz').hidden = true; $('#fab-voz').hidden = true; }
+
+// No app Android a voz é captada pelo próprio celular (Google)
+window.falaNativa = (texto, erro) => {
+  $('#btn-voz').classList.remove('ouvindo');
+  if (texto) { $('#f-titulo').value = texto; aplicarFala(texto); }
+  else statusVoz(erro === 'indisponivel' ? 'Este celular não tem o reconhecimento de voz do Google.' : 'Não ouvi nada. Toque no 🎤 e fale de novo.');
+};
 
 function statusVoz(msg) { const el = $('#voz-status'); el.hidden = !msg; el.textContent = msg || ''; }
 
@@ -677,6 +768,7 @@ function aplicarFala(frase) {
   $('#f-titulo').value = titulo || frase;
   if (quando) {
     $('#f-lembrar').value = paraInputLocal(quando);
+    mostrarAviso();
     const iso = isoLocal(quando);
     if (iso === hoje()) setPrazo('hoje');
     else if (iso === amanha()) setPrazo('amanha');
@@ -688,6 +780,12 @@ function aplicarFala(frase) {
 }
 
 function ouvir() {
+  if (!Reconhecimento && NATIVO) {
+    $('#btn-voz').classList.add('ouvindo');
+    statusVoz('🎙️ Pode falar… (ex.: "ligar pro RH amanhã às 9")');
+    NATIVO.ouvir();
+    return;
+  }
   if (!Reconhecimento) return;
   if (ouvindo) { ouvindo.stop(); return; }
   const r = new Reconhecimento();
@@ -822,6 +920,7 @@ function alarmeValendo(t, agora) {
 }
 
 function verificarLembretes() {
+  if (NATIVO) return;   // no app Android quem toca é o alarme do celular
   const agora = Date.now();
   // se o alarme aberto já foi resolvido em outro aparelho, fecha sozinho
   if (alarmeAtual) {
@@ -857,6 +956,7 @@ function base64ParaBytes(b64) {
 function atualizarSino() { if ($('#dlg-menu').open) mostrarStatusNotif(); }
 function mostrarStatusNotif() {
   const el = $('#menu-notif');
+  if (NATIVO) { el.innerHTML = '<p class="ok-txt">✓ Alarmes do celular ativados</p>'; return; }
   if (!('Notification' in window)) { el.innerHTML = '<p>Este navegador não tem notificações.</p>'; return; }
   const p = Notification.permission;
   if (p === 'granted') el.innerHTML = '<p class="ok-txt">✓ Ativados</p>';
@@ -1429,7 +1529,7 @@ async function novaNota() {
 window.addEventListener('resize', () => { if (aba === 'notas') renderNotas(); });
 
 /* ---------- início ---------- */
-const VERSAO_APP = 20;
+const VERSAO_APP = 22;
 // Tema pelo horário: claro das 07h às 18h, escuro das 18h às 07h (confere a cada minuto)
 function temaEscolhido() { try { return localStorage.getItem('agenda-tema') || 'auto'; } catch { return 'auto'; } }
 function aplicarTema() {
@@ -1444,7 +1544,7 @@ aplicarTema();
 setInterval(aplicarTema, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) aplicarTema(); });
 // Atualização automática: ao abrir/voltar pro app, busca versão nova e recarrega sozinho
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !NATIVO) {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
     const checar = () => reg.update().catch(() => {});
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checar(); });

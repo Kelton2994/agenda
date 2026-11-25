@@ -192,6 +192,8 @@ dialog.sheet h2 { margin: 6px 0 18px; font-size: 20px; letter-spacing: -.01em; }
 .campo label { margin-bottom: 8px; }
 .rotulo { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.rotulo-aviso { margin: 12px 0 6px; font-size: 13px; font-weight: 600; color: var(--texto-2, #64748b); }
+#chips-aviso small { font-weight: 500; opacity: .75; }
 .chips button { border: 1.5px solid var(--borda); background: var(--card-2); border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 600; color: var(--texto); }
 .chips button.sel { background: var(--azul); border-color: var(--azul); color: #fff; }
 .chips.pequeno button { font-size: 13px; padding: 6px 12px; color: var(--azul); background: var(--azul-suave); border-color: transparent; }
