@@ -20,7 +20,7 @@
       if (t === 'escuro' || (t === 'auto' && (h >= 18 || h < 7))) document.documentElement.classList.add('escuro');
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=24">
   <title>Minha Agenda</title>
 </head>
 <body>
@@ -51,28 +51,28 @@
     <header class="topo">
       <div class="topo-linha">
         <div>
-          <p id="saudacao" class="saudacao">Olá 👋</p>
+          <p id="saudacao" class="saudacao">Olá</p>
           <h1 id="data-hoje">Minha Agenda</h1>
         </div>
         <div class="topo-acoes">
-          <button id="btn-busca" class="icone" aria-label="Pesquisar">🔍</button>
-          <button id="btn-menu" class="icone" aria-label="Mais opções">⋯</button>
+          <button id="btn-busca" class="icone-btn" aria-label="Pesquisar"><i data-ic="search"></i></button>
+          <button id="btn-menu" class="icone-btn" aria-label="Mais opções"><i data-ic="more"></i></button>
         </div>
       </div>
       <div id="resumo" class="resumo"></div>
     </header>
 
     <div id="barra-busca" class="barra-busca" hidden>
-      <span class="lupa">🔍</span>
-      <input id="busca-global" type="search" placeholder="Pesquisar em tarefas e notas..." autocomplete="off" enterkeyhint="search">
-      <button type="button" id="busca-fechar" class="btn texto">Fechar</button>
+      <i data-ic="search" class="lupa"></i>
+      <input id="busca-global" type="search" placeholder="Pesquisar tarefas e notas" autocomplete="off" enterkeyhint="search">
+      <button type="button" id="busca-fechar" class="icone-btn" aria-label="Fechar"><i data-ic="x"></i></button>
     </div>
 
     <nav class="abas">
-      <button data-aba="hoje" class="ativa">Hoje</button>
-      <button data-aba="todas">Todas</button>
-      <button data-aba="concluidas">Concluídas</button>
-      <button data-aba="notas">📝 Notas</button>
+      <button data-aba="hoje" class="ativa"><i data-ic="hoje"></i><span>Hoje</span></button>
+      <button data-aba="todas"><i data-ic="lista"></i><span>Todas</span></button>
+      <button data-aba="notas"><i data-ic="nota"></i><span>Notas</span></button>
+      <button data-aba="concluidas"><i data-ic="feito"></i><span>Feitas</span></button>
     </nav>
 
     <div id="busca-wrap" class="busca-wrap" hidden>
@@ -83,103 +83,118 @@
     <p class="versao-app"></p>
     <section id="notas" class="notas" hidden></section>
 
-    <button id="fab-voz" class="fab-voz" aria-label="Criar tarefa falando">🎤</button>
-    <button id="fab" class="fab" aria-label="Nova tarefa">+</button>
+    <button id="fab-voz" class="fab-voz" aria-label="Criar tarefa falando"><i data-ic="mic"></i></button>
+    <button id="fab" class="fab" aria-label="Nova tarefa"><i data-ic="mais"></i></button>
   </section>
 
   <!-- NOVA / EDITAR TAREFA -->
-  <dialog id="dlg-tarefa" class="sheet">
+  <dialog id="dlg-tarefa" class="sheet sheet-tarefa">
     <form id="form-tarefa">
       <div class="alca" tabindex="-1" autofocus></div>
-      <h2 id="dlg-titulo">Nova tarefa</h2>
+      <div class="sheet-cab">
+        <h2 id="dlg-titulo">Nova tarefa</h2>
+        <button type="button" id="btn-cancelar" class="icone-btn" aria-label="Fechar"><i data-ic="x"></i></button>
+      </div>
 
-      <label for="f-titulo">O que precisa fazer?</label>
       <div class="titulo-voz">
-        <input id="f-titulo" required autocomplete="off" placeholder="Ex.: Relatório de absenteísmo pro gerente">
-        <button type="button" id="btn-voz" class="btn-voz" aria-label="Falar">🎤</button>
+        <textarea id="f-titulo" required rows="1" autocomplete="off" placeholder="O que precisa fazer?" enterkeyhint="done"></textarea>
+        <button type="button" id="btn-voz" class="btn-voz" aria-label="Falar"><i data-ic="mic"></i></button>
       </div>
       <p id="voz-status" class="voz-status" hidden></p>
 
-      <div class="campo">
-        <span class="rotulo">Repetir</span>
-        <div class="chips" id="chips-repetir">
-          <button type="button" data-rep="">Não repete</button>
-          <button type="button" data-rep="mensal">🔁 Todo mês</button>
-          <button type="button" data-rep="semanal">🔁 Toda semana</button>
-        </div>
-      </div>
-
-      <div id="campos-recorrencia" class="caixa-rec" hidden>
-        <div class="linha-2">
-          <label id="lbl-dia-mes">Dia do mês
-            <input type="number" id="f-dia-mes" min="1" max="31" value="15" inputmode="numeric">
-          </label>
-          <label id="lbl-dia-semana" hidden>Dia da semana
-            <select id="f-dia-semana">
-              <option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option>
-              <option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option>
-            </select>
-          </label>
-          <label>Avisar quantos dias antes
-            <input type="number" id="f-dias-antes" min="0" max="31" value="5" inputmode="numeric">
-          </label>
-        </div>
-        <label>Horário do aviso (todo dia, até você concluir)
-          <input type="time" id="f-hora-aviso" value="08:00">
-        </label>
-        <p class="dica-rec" id="dica-rec"></p>
-      </div>
-
-      <div class="campo" id="campo-prazo">
-        <span class="rotulo">Prazo</span>
-        <div class="chips" id="chips-prazo">
+      <div class="campo-form" id="linha-prazo">
+        <p class="rot">Prazo</p>
+        <div class="segmento" id="chips-prazo">
           <button type="button" data-prazo="hoje">Hoje</button>
           <button type="button" data-prazo="amanha">Amanhã</button>
-          <button type="button" data-prazo="data">Escolher data</button>
+          <button type="button" data-prazo="data">Outra data</button>
           <button type="button" data-prazo="">Sem prazo</button>
         </div>
         <input type="date" id="f-prazo" hidden>
       </div>
 
-      <label>Quem pediu
-        <input id="f-quem" list="lista-quem" autocomplete="off" placeholder="Opcional">
-      </label>
-      <datalist id="lista-quem"></datalist>
-
-      <div class="campo" id="campo-lembrar">
-        <label>Me lembrar em
-          <input type="datetime-local" id="f-lembrar">
-        </label>
-        <div class="chips pequeno" id="chips-lembrar">
-          <button type="button" data-lembrar="5min">Daqui 5 min</button>
-          <button type="button" data-lembrar="1h">Daqui 1h</button>
+      <div class="campo-form" id="linha-lembrar">
+        <p class="rot">Me lembrar</p>
+        <div class="opcoes" id="chips-lembrar">
+          <button type="button" data-lembrar="">Não</button>
+          <button type="button" data-lembrar="15min">Em 15 min</button>
+          <button type="button" data-lembrar="1h">Em 1 hora</button>
+          <button type="button" data-lembrar="3h">Em 3 horas</button>
           <button type="button" data-lembrar="amanha-0630">Amanhã 06:30</button>
-          <button type="button" data-lembrar="">Sem lembrete</button>
+          <button type="button" data-lembrar="outro">Outro horário</button>
         </div>
-        <p class="rotulo-aviso" id="rotulo-aviso">Como avisar</p>
-        <div class="chips" id="chips-aviso">
-          <button type="button" data-aviso="alarme">⏰ Alarme <small>(toca até eu responder)</small></button>
-          <button type="button" data-aviso="notificacao">🔔 Só notificação</button>
+        <input type="datetime-local" id="f-lembrar" hidden>
+        <div id="bloco-aviso" hidden>
+          <div class="segmento" id="chips-aviso">
+            <button type="button" data-aviso="alarme"><i data-ic="alarme"></i>Alarme</button>
+            <button type="button" data-aviso="notificacao"><i data-ic="sino"></i>Só notificação</button>
+          </div>
+          <p class="dica" id="dica-aviso"></p>
         </div>
       </div>
 
+      <div class="campo-form">
+        <p class="rot">Quem pediu</p>
+        <input id="f-quem" autocomplete="off" placeholder="Nome (opcional)">
+        <div class="opcoes" id="sugestoes-quem"></div>
+      </div>
 
-      <div id="campos-edicao" hidden>
-        <label>Status
-          <select id="f-status"></select>
-        </label>
-        <label>Anotações / onde parei
-          <textarea id="f-notas" rows="3"></textarea>
-        </label>
+      <div class="campo-form">
+        <p class="rot">Repetir</p>
+        <div class="segmento" id="chips-repetir">
+          <button type="button" data-rep="">Não repete</button>
+          <button type="button" data-rep="mensal">Todo mês</button>
+          <button type="button" data-rep="semanal">Toda semana</button>
+        </div>
+        <div id="campos-recorrencia" class="caixa-rec" hidden>
+          <div class="linha-2">
+            <label id="lbl-dia-mes">Dia do mês
+              <input type="number" id="f-dia-mes" min="1" max="31" value="15" inputmode="numeric">
+            </label>
+            <label id="lbl-dia-semana" hidden>Dia da semana
+              <select id="f-dia-semana">
+                <option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option>
+                <option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option>
+              </select>
+            </label>
+            <label>Avisar dias antes
+              <input type="number" id="f-dias-antes" min="0" max="31" value="5" inputmode="numeric">
+            </label>
+          </div>
+          <label>Horário do aviso
+            <input type="time" id="f-hora-aviso" value="08:00">
+          </label>
+          <p class="dica" id="dica-rec"></p>
+        </div>
+      </div>
+
+      <div class="campo-form" id="linha-status" hidden>
+        <p class="rot">Status</p>
+        <div class="opcoes" id="opcoes-status"></div>
+        <select id="f-status" hidden></select>
+      </div>
+
+      <div class="campo-form" id="linha-notas" hidden>
+        <p class="rot">Anotações / onde parei</p>
+        <textarea id="f-notas" rows="2" placeholder="Ex.: falta conferir o turno 3"></textarea>
       </div>
 
       <div class="rodape">
-        <button type="button" id="btn-excluir" class="btn perigo" hidden>Excluir</button>
+        <button type="button" id="btn-excluir" class="icone-btn perigo" hidden aria-label="Excluir"><i data-ic="lixo"></i></button>
         <span class="esp"></span>
-        <button type="button" id="btn-cancelar" class="btn texto">Cancelar</button>
         <button type="submit" id="btn-salvar" class="btn primario">Salvar</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- AÇÕES DA TAREFA (toque na tarefa) -->
+  <dialog id="dlg-acoes" class="sheet sheet-acoes">
+    <div class="acoes-corpo">
+      <div class="alca" tabindex="-1" autofocus></div>
+      <h3 id="acoes-titulo"></h3>
+      <div id="acoes-meta" class="linha-meta"></div>
+      <div id="acoes-lista" class="acoes-lista"></div>
+    </div>
   </dialog>
 
   <!-- PAUSAR -->
@@ -276,8 +291,8 @@
     </div>
   </dialog>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" hidden><span id="toast-msg"></span><button type="button" id="toast-acao" hidden></button></div>
 
-  <script type="module" src="app.js?v=22"></script>
+  <script type="module" src="app.js?v=24"></script>
 </body>
 </html>

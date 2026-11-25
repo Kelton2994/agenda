@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versao": "3",
+  "versionCode": 5,
+  "versao": "5",
   "apk": "https://kelton2994.github.io/agenda/app/MinhaAgenda.apk",
-  "novidades": "Escolha entre alarme ou só notificação, som do alarme no menu ⋯, volume crescente e atualização automática."
+  "novidades": "Visual novo e tela de nova tarefa com tudo à vista: prazo, lembrete, alarme ou notificação, quem pediu e repetir."
 }
